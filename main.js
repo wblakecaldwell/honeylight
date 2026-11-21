@@ -587,10 +587,14 @@ const PAL = [
   guard = 0; while (flowers.length < 185 && guard++ < 3000) { const a = rnd(TAU), d = rnd(40, 310); place(Math.cos(a) * d, Math.sin(a) * d); }
   // sunblooms crown the orchard canopies (rare, worth 3)
   const SUNPAL = { p: [1.3, 0.85, 0.12], c: [0.95, 0.38, 0.02] };
-  for (const t of orchTrees) flowers.push({ x: t.x + srnd(-2, 2), z: t.z + srnd(-2, 2), y: t.top + t.cr * 0.68 + 0.4, r: 1.5, T: SUNPAL, np: 14, len: 3.2, cool: 0, tilt: 0.2, ax: 0, az: 0, val: 3, orch: true });
+  const BLOSSOM = { p: [1.15, 0.72, 0.78], c: [0.95, 0.85, 0.3] };
+  for (const t of orchTrees) flowers.push({ x: t.x + srnd(-2, 2), z: t.z + srnd(-2, 2), y: t.top + t.cr * 0.68 + 0.4, r: 1.5, T: BLOSSOM, np: 14, len: 3.2, cool: 0, tilt: 0.2, ax: 0, az: 0, val: 1, orch: true, canopy: true });
   for (let i = 0; i < 30; i++) { const a = srnd(TAU), d = Math.sqrt(srnd()) * (ORCH.r - 5), x = ORCH.x + Math.cos(a) * d, z = ORCH.z + Math.sin(a) * d;
     if (orchTrees.some(t => Math.hypot(t.x - x, t.z - z) < t.cr + 2) || flowers.some(f => Math.hypot(f.x - x, f.z - z) < 7)) continue; const T = PAL[(srnd() * PAL.length) | 0];
-    flowers.push({ x, z, y: terrainH(x, z) + srnd(8, 15), r: srnd(1, 1.6), T, np: Math.round(srnd(T.np[0], T.np[1])), len: srnd(T.len[0], T.len[1]), cool: 0, tilt: srnd(0.05, 0.45), ax: 0, az: 0, val: 1, orch: true }); }
+    flowers.push({ x, z, y: terrainH(x, z) + srnd(8, 15), r: srnd(1, 1.6), T, np: Math.round(srnd(T.np[0], T.np[1])), len: srnd(T.len[0], T.len[1]), cool: 0, tilt: srnd(0.05, 0.45), ax: 0, az: 0, val: 2, orch: true }); }
+  { // the ground flowers tucked closest under the canopies become sunblooms (worth 3)
+    const g = flowers.filter(f => f.orch && !f.canopy).map(f => [f, Math.min(...orchTrees.map(t => Math.hypot(t.x - f.x, t.z - f.z) - t.cr))]).sort((a, b) => a[1] - b[1]);
+    for (const [f] of g.slice(0, 5)) { f.val = 3; f.T = SUNPAL; f.np = 14; f.r = 1.4; f.y = Math.min(f.y, terrainH(f.x, f.z) + 9); } }
   { const H = HILLS[0]; flowers.push({ x: H.x, z: H.z, y: terrainH(H.x, H.z) + 30, r: 5.5, T: { p: [1.2, 0.72, 0.04], c: [0.22, 0.11, 0.03] }, np: 28, len: 12, cool: 0, tilt: 0.25, ax: 0.1, az: -0.05, val: 5, giant: true, sw: 3.5 }); }
   for (const sg of [-1, 1]) { const c = LOG.c.clone().addScaledVector(LOG.axis, sg * 9); flowers.push({ x: c.x, z: c.z, y: c.y - LOG.ri + 1.1, r: 0.8, T: { p: [0.6, 1.15, 0.8], c: [0.9, 1.0, 0.6] }, np: 7, len: 1.6, cool: 0, tilt: 0.2, ax: 0, az: 0, val: 2, inLog: true }); }
   const pg = new THREE.PlaneGeometry(1, 1, 6, 4); pg.rotateX(-Math.PI / 2); pg.translate(0.5, 0, 0);
@@ -615,7 +619,7 @@ const PAL = [
   const m = new M4(), q = new Q4(), e = new THREE.Euler(), col = new THREE.Color(); let pi = 0;
   const swP = new Float32Array(totalP), swF = new Float32Array(flowers.length);
   flowers.forEach((f, i) => {
-    f.sway = f.giant ? 0.25 : (f.val >= 3 || f.inLog) ? 0 : 1; swF[i] = f.sway;
+    f.sway = f.giant ? 0.25 : (f.val >= 3 || f.inLog || f.canopy) ? 0 : 1; swF[i] = f.sway;
     const gy = terrainH(f.x, f.z);
     m.compose(new V3(f.x, gy - 0.5, f.z), q.identity(), new V3(f.sw || 1, f.y - gy + 0.3, f.sw || 1)); stems.setMatrixAt(i, m);
     const hq = new Q4().setFromEuler(new THREE.Euler(f.ax, 0, f.az));
@@ -636,7 +640,7 @@ const shrooms = [];
   const capG = new THREE.SphereGeometry(1, 20, 10, 0, TAU, 0, Math.PI / 2), stG = new THREE.CylinderGeometry(0.22, 0.32, 1, 10); stG.translate(0, 0.5, 0); const stM = simple('0.80,0.74,0.62', 0.1, 0.5);
   for (const [a, d, R] of [[0.6, 26, 4.2], [0.9, 32, 2.8], [-0.7, 30, 3.6], [2.6, 40, 5], [4.0, 55, 3.4], [1.5, 80, 4.4], [-1.6, 95, 3.2]]) {
     const x = Math.cos(a) * d, z = Math.sin(a) * d, gy = terrainH(x, z), h = R * 1.4; const c = new THREE.Mesh(capG, capM); c.position.set(x, gy + h, z); c.scale.set(R, R * 0.7, R); const s = new THREE.Mesh(stG, stM); s.position.set(x, gy - 0.5, z); s.scale.set(R, h + 0.6, R); scene.add(c, s);
-    shrooms.push({ x, y: gy + h, z, R, mesh: c, sq: 0 });
+    shrooms.push({ x, y: gy + h, z, R, gy, mesh: c, sq: 0 });
   }
 }
 // pond
@@ -1069,7 +1073,7 @@ function update(dt) {
       for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (flowerHit(f, d, dt)) {
         if (f.rich > 0 && !(f.orch && !G.orchard)) richSip(f, dt); else if (f.giant) { if (f.cool <= 0 && P.pollen < G.cap) giantSip(f, dt); } else if (f.val >= 2) { if (f.cool <= 0 && P.pollen < G.cap && !(f.orch && !G.orchard)) dwellSip(f, dt); } else
         if (f.cool <= 0 && P.pollen < G.cap && !(f.orch && !G.orchard)) { f.cool = f.val >= 3 ? 70 : 25; addPollen(f); tone(SCALE[Math.min(7, P.pollen - 1)], 0.13, 2.2); _v.set(f.x, f.y + 0.6, f.z); puff(_v, 26, [1.0, 0.82, 0.25], 2.2, 0.012, 1.8, 0.6, 0.8); } } if (f.cool > 0) f.cool -= dt; }
-      for (const s of shrooms) { tmp.set(P.pos.x - s.x, (P.pos.y - s.y) / 0.7, P.pos.z - s.z); const d = tmp.length(); if (d < s.R + 0.45 && tmp.y > -0.2) { tmp.normalize(); P.pos.set(s.x + tmp.x * (s.R + 0.45), s.y + tmp.y * (s.R + 0.45) * 0.7, s.z + tmp.z * (s.R + 0.45)); P.vel.addScaledVector(tmp, 17); P.vel.y += 6; s.sq = 1; sweep(170, 420, 0.25, 0.12); sweep(420, 260, 0.5, 0.06); } s.sq = Math.max(0, s.sq - dt * 2.5); const k = 1 - Math.sin(s.sq * Math.PI) * 0.25 * s.sq; s.mesh.scale.set(s.R * (2 - k), s.R * 0.7 * k, s.R * (2 - k)); }
+      for (const s of shrooms) { shroomSolid(s); tmp.set(P.pos.x - s.x, (P.pos.y - s.y) / 0.7, P.pos.z - s.z); const d = tmp.length(); if (d < s.R + 0.45 && tmp.y > -0.2) { tmp.normalize(); P.pos.set(s.x + tmp.x * (s.R + 0.45), s.y + tmp.y * (s.R + 0.45) * 0.7, s.z + tmp.z * (s.R + 0.45)); P.vel.addScaledVector(tmp, 17); P.vel.y += 6; s.sq = 1; sweep(170, 420, 0.25, 0.12); sweep(420, 260, 0.5, 0.06); } s.sq = Math.max(0, s.sq - dt * 2.5); const k = 1 - Math.sin(s.sq * Math.PI) * 0.25 * s.sq; s.mesh.scale.set(s.R * (2 - k), s.R * 0.7 * k, s.R * (2 - k)); }
       // water
       const ow = overWater(P.pos.x, P.pos.z), alt = P.pos.y - WY;
       if (ow && alt < 4.5) { P.wet = Math.min(1, P.wet + dt * (1 - alt / 4.5) * 0.55); if (Math.random() < dt * 14 * (1 - alt / 4.5)) { _v.set(P.pos.x + rnd(-1, 1), WY + 0.1, P.pos.z + rnd(-1, 1)); puff(_v, 2, [0.85, 0.93, 1], 1.2, 0.012, 0.7, 6, 1.2); if (Math.random() < 0.3) tone(rnd(1400, 2600), 0.02, 0.15); } }
@@ -1519,6 +1523,12 @@ function updateAimShadow() {
   let y = terrainH(P.pos.x, P.pos.z); if (overWater(P.pos.x, P.pos.z)) y = Math.max(y, WY);
   for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (d < f.r * 0.75 + f.len * 0.85 && f.y < P.pos.y) { const t = f.y + bloomH(f, d) + 0.05; if (t > y) y = t; } }
   const h = P.pos.y - y; aimShadow.visible = h < 30; aimShadow.position.set(P.pos.x, y + 0.06, P.pos.z); aimShadow.scale.setScalar(0.55 + h * 0.03); aimShadow.material.uniforms.uA.value = 0.55 * (1 - h / 30);
+}
+function shroomSolid(s) {
+  const dx = P.pos.x - s.x, dz = P.pos.z - s.z, d = Math.hypot(dx, dz), y = P.pos.y, br = 0.45;
+  const stemR = s.R * 0.28 + br;
+  if (y > s.gy - 1 && y < s.y && d < stemR) { const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; P.pos.x = s.x + nx * stemR; P.pos.z = s.z + nz * stemR; const vn = P.vel.x * nx + P.vel.z * nz; if (vn < 0) { P.vel.x -= vn * nx; P.vel.z -= vn * nz; } }
+  if (d < s.R + br * 0.5 && y < s.y + 0.05 && y > s.y - 0.5 - br) { P.pos.y = s.y - 0.5 - br; if (P.vel.y > 0) P.vel.y = -P.vel.y * 0.2; }
 }
 function updateRound5(dt) { updateMob(dt); updateAimShadow(); waspAudio(); }
 // --- valuable flowers make you stay: dwell time grows with value, and the wasps notice
