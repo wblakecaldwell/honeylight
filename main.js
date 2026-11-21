@@ -490,7 +490,7 @@ function makeForager() {
 for (let i = 0; i < 28; i++) makeForager();
 // scripted sisters: the one who greets you at birth, and three who welcome you home
 function makeScripted() { const b = makeFlier(1.02); b.tp = new V3(rnd(-4, 4), rnd(2, 5), rnd(-4, 4)); b.look = null; b.active = false; b.p.copy(b.tp); const a = rnd(TAU), r = rnd(2, 6), yy = rnd(2, 5), f = rnd(0.2, 0.4);
-  b.update = (dt, t) => { if (!b.active) b.tp.set(Math.cos(t * f + a) * r, yy + Math.sin(t * 0.5 + a), Math.sin(t * f * 1.2 + a) * r);
+  b.update = (dt, t) => { if (!b.active) { b.tp.set(Math.cos(t * f + a) * r, yy + Math.sin(t * 0.5 + a), Math.sin(t * f * 1.2 + a) * r); _v.set(b.tp.x - BIRTH.x, b.tp.y - BIRTH.y, b.tp.z - BIRTH.z); const dB = _v.length(); if (dB < 3.5) b.tp.addScaledVector(_v.normalize(), 3.5 - dB); }
     b.p.lerp(b.tp, Math.min(1, dt * (b.active ? 3.2 : 1.2))); b.p.y += Math.sin(t * 5 + b.ph) * 0.004;
     if (b.active && b.look) { _v.copy(b.look).sub(b.p); b.fwd.lerp(_v.normalize(), Math.min(1, dt * 6)); orient(b.q, b.fwd, YA); b.q.multiply(_q.setFromAxisAngle(ZA, Math.sin(t * 9 + b.ph) * 0.07)); b.prev.copy(b.p); } else b.face(dt); }; return b; }
 const hero = makeScripted(), greeters = [makeScripted(), makeScripted(), makeScripted()];
@@ -1214,11 +1214,11 @@ function update(dt) {
     P.pos.set(BIRTH.x, BIRTH.y + Math.sin(time * 1.1) * 0.006, BIRTH.z - 0.72 + Math.min(P.chews, 8) * 0.012);
     if (P.mode === 'cell') { if (P.t > 3 && P.chews === 0 && hintEl.style.opacity != 1) hint('<kbd>click</kbd>', 5);
       black = P.lives > 1 ? clamp(1 - P.t / 1.5, 0, 1) : 0;
-      if (P.chews >= 3 && !hero.active) { hero.active = true; hero.look = new V3(BIRTH.x, BIRTH.y, BIRTH.z - 0.5); if (hero.p.distanceTo(P.pos) > 6) hero.p.set(BIRTH.x + 2, BIRTH.y + 1.5, BIRTH.z + 1.4); }
+      if (P.chews >= 3 && !hero.active && P.lives === 1) { hero.active = true; hero.look = new V3(BIRTH.x, BIRTH.y, BIRTH.z - 0.5); if (hero.p.distanceTo(P.pos) > 6) hero.p.set(BIRTH.x + 2, BIRTH.y + 1.5, BIRTH.z + 1.4); }
       if (hero.active) hero.tp.set(BIRTH.x + Math.sin(time * 0.9) * 0.08, BIRTH.y + 0.02 + Math.sin(time * 1.4) * 0.05, BIRTH.z + 0.62); }
   } else if (P.mode === 'emerge') {
     const f = smooth(0, 1.8, P.t); P.pos.set(BIRTH.x, BIRTH.y, lerp(BIRTH.z - 0.62, BIRTH.z + 0.42, f)); P.pos.y += Math.sin(P.t * 9) * 0.012;
-    hero.active = true; if (!hero.look) hero.look = new V3(); hero.tp.set(BIRTH.x + 0.9, BIRTH.y + 0.35, BIRTH.z + 1.15); hero.look.copy(P.pos);
+    if (P.lives === 1) { hero.active = true; if (!hero.look) hero.look = new V3(); hero.tp.set(BIRTH.x + 0.9, BIRTH.y + 0.35, BIRTH.z + 1.15); hero.look.copy(P.pos); }
     if (P.t > 1.8) { P.mode = 'crawl'; P.t = 0; heroT = 0; if (P.lives === 1) hint('<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk &nbsp;·&nbsp; mouse look', 7); }
   } else if (P.mode === 'crawl') {
     const c = COMBS[BIRTH.ci];
@@ -1228,7 +1228,7 @@ function update(dt) {
     P.pos.x = clamp(P.pos.x, -c.hw + 0.3, c.hw - 0.3); P.pos.y = clamp(P.pos.y, c.yb + 0.4, HTOP - 0.5); P.pos.z = c.z + CT / 2 + 0.42;
     if (kf || ks) bob += dt * 11;
     // the sister's greeting
-    heroT += dt; if (hero.active) { if (heroT < 5) { hero.tp.copy(P.pos).addScaledVector(fwd, 0.85); hero.tp.z = clamp(hero.tp.z, c.z + 1.0, c.z + 2.0); hero.look.copy(P.pos); if (heroT > 1.2 && !hero.fed) { hero.fed = true; tone(659.25, 0.1, 2); tone(880, 0.08, 2.2, 'sine', 0.18); puff(hero.p, 8, [1, 0.8, 0.3], 0.4, 0.01, 1.2); } } else { hero.active = false; hero.fed = false; } }
+    heroT += dt; if (hero.active) { if (heroT < 3) { if (heroT < dt * 1.5) hero.tp.copy(P.pos).addScaledVector(fwd, 0.95); hero.tp.z = clamp(hero.tp.z, c.z + 1.0, c.z + 2.0); hero.look.copy(P.pos); if (heroT > 1.2 && !hero.fed) { hero.fed = true; tone(659.25, 0.1, 2); tone(880, 0.08, 2.2, 'sine', 0.18); puff(hero.p, 8, [1, 0.8, 0.3], 0.4, 0.01, 1.2); } } else { hero.active = false; hero.fed = false; } }
     P.wingT += dt; if (!P.wingsReady && P.wingT > (P.lives > 1 ? 3 : 7)) { P.wingsReady = true; sweep(90, 200, 0.7, 0.06, 'sawtooth'); hint('<kbd>space</kbd>', 30); }
     if (P.wingsReady && touchFwd && P.wingT > 9) takeOff();
   } else if (P.mode === 'fly') {
@@ -1243,7 +1243,7 @@ function update(dt) {
     if (!inHive) { const hv = Math.hypot(P.vel.x, P.vel.z), fl = Math.hypot(fwd.x, fwd.z); if (hv > 4 && kf > 0 && fl > 0.2) { const k = Math.min(1, dt * 1.6 * outF); P.vel.x += (fwd.x / fl * hv - P.vel.x) * k; P.vel.z += (fwd.z / fl * hv - P.vel.z) * k; }
       if (!ku) P.vel.y *= 1 - Math.min(1, dt * 1.2 * outF); }
     P.pos.addScaledVector(P.vel, dt);
-    collide(P.pos, P.vel);
+    collide(P.pos, P.vel); beeCollide();
     P.landed = null;
     if (!inHive) {
       for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (flowerHit(f, d, dt) && !flowersClosed()) {
@@ -1833,6 +1833,12 @@ function dayEnd(dt) {
 function updateRound6(dt) { updateDay(dt); updateZones(dt); updateDragonflies(dt); }
 applyDayLight();
 G.orchard = !!G.zones.garden;
+function beeCollide() {
+  for (const b of bees) { if (b === me || b.s.y < 0.05) continue; const rr = 0.4 * b.s.y + PR; const dx = P.pos.x - b.p.x, dy = P.pos.y - b.p.y, dz = P.pos.z - b.p.z;
+    if (Math.abs(dx) > rr || Math.abs(dy) > rr || Math.abs(dz) > rr) continue; const d = Math.hypot(dx, dy, dz); if (d >= rr) continue;
+    const nx = d > 1e-4 ? dx / d : 0, ny = d > 1e-4 ? dy / d : 1, nz = d > 1e-4 ? dz / d : 0; P.pos.set(b.p.x + nx * rr, b.p.y + ny * rr, b.p.z + nz * rr);
+    const vn = P.vel.x * nx + P.vel.y * ny + P.vel.z * nz; if (vn < 0) { P.vel.x -= vn * nx * 1.3; P.vel.y -= vn * ny * 1.3; P.vel.z -= vn * nz * 1.3; } }
+}
 function updateRound5(dt) { updateMob(dt); updateAimShadow(); waspAudio(); updateRound6(dt); }
 // --- valuable flowers make you stay: dwell time grows with value, and the wasps notice
 function dwellSip(f, dt) {
@@ -1984,4 +1990,4 @@ function adaptRes(ms) {
 }
 
 requestAnimationFrame(frame);
-window.__g = { ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+window.__g = { rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
