@@ -45,6 +45,20 @@ const orchTrees = [];
   for (const t of orchTrees) { t.gy = terrainH(t.x, t.z); t.top = t.gy + (t.nest ? 40 : srnd(24, 32)); }
 }
 
+// ---------- round 6: the forest edge (its own seed, so older landmarks stay put) ----------
+const FOREST = { x: -95, z: 262, r: 58 };
+const forestTrees = [], PADS0 = [];
+{ let s = 4242; const fr = (a, b) => { s = (s * 16807) % 2147483647; const r = (s - 1) / 2147483646; return a + r * (b - a); };
+  let guard = 0;
+  while (forestTrees.length < 17 && guard++ < 3000) { const a = fr(0, TAU), d = Math.sqrt(fr(0, 1)) * (FOREST.r + 14), x = FOREST.x + Math.cos(a) * d, z = FOREST.z + Math.sin(a) * d;
+    if (forestTrees.some(t => Math.hypot(t.x - x, t.z - z) < 18)) continue;
+    forestTrees.push({ x, z, R: fr(1.8, 3.0), cr: fr(9, 12.5), h: fr(34, 48) }); }
+  for (const t of forestTrees) { t.gy = terrainH(t.x, t.z); t.top = t.gy + t.h; t.blobs = [];
+    for (let i = 0; i < 7; i++) { const a = i / 7 * TAU + fr(0, 0.6), d = fr(0.2, 0.75) * t.cr; t.blobs.push([t.x + Math.cos(a) * d, t.top + fr(-0.35, 0.2) * t.cr, t.z + Math.sin(a) * d, t.cr * fr(0.5, 0.7), t.cr * fr(0.35, 0.5)]); }
+    t.blobs.push([t.x, t.top + t.cr * 0.15, t.z, t.cr * 0.7, t.cr * 0.45]); }
+  FOREST.rnd = fr;
+}
+
 const overWater = (x, z) => Math.hypot(x - POND.x, z - POND.z) < POND.r + 25 && terrainH(x, z) < WY - 0.05;
 const COMBS = [-6.8, -3.4, 0, 3.4, 6.8].map((z, i) => ({ z, hw: Math.sqrt(RIN * RIN - z * z) - 1.4, yb: [9, 7.5, 8.5, 7, 9.5][i], holes: [] }));
 COMBS[2].holes.push({ x: 5.6, y: 14, r: 1.0 }); COMBS[3].holes.push({ x: -2, y: 16, r: 1.0 }); COMBS[1].holes.push({ x: 1, y: 11.5, r: 0.9 });
@@ -78,6 +92,7 @@ shadowRT.depthTexture = new THREE.DepthTexture(SHADOW_RES, SHADOW_RES); shadowRT
 shadowRT.depthTexture.compareFunction = THREE.LessEqualCompare; shadowRT.depthTexture.minFilter = shadowRT.depthTexture.magFilter = THREE.LinearFilter;
 const U = { uTime: { value: 0 }, uCam: { value: new V3() }, uSun: { value: SUN }, uGlow: { value: 0 }, uShadow: { value: shadowRT.depthTexture }, uShadowM: { value: new M4() }, uShadowOn: { value: 0 } };
 U.uWind = { value: new V3() };
+U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 };
 const SWAYGLSL = `uniform float uTime; uniform vec3 uWind; attribute float aSway;
 vec2 sway(vec2 p){ float ph=p.x*0.07+p.y*0.05; float s=sin(uTime*1.3+ph)*0.6+sin(uTime*2.9+ph*1.7)*0.25; return uWind.xy*(uWind.z*0.55+s*(0.35+uWind.z*0.4)); }
 `;
@@ -99,7 +114,7 @@ void main(){
   gl_Position=projectionMatrix*viewMatrix*w;
 }`;
 const COMMON = `
-uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn;
+uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze;
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;
 float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -122,7 +137,7 @@ float sunShadow(vec3 p, vec3 n){
 vec3 hazeCol(vec3 dir){
   float sd=max(dot(dir,uSun),0.0);
   vec3 c=mix(vec3(0.46,0.52,0.70), vec3(1.30,0.84,0.46), 0.12+0.88*pow(sd,2.0));
-  return c+vec3(1.4,0.75,0.3)*pow(sd,20.0)*0.9;
+  return (c+vec3(1.4,0.75,0.3)*pow(sd,20.0)*0.9)*uHaze;
 }
 bool inHole(vec3 p){ return p.x>0.0 && length(vec2(p.y-${TY.toFixed(1)},p.z))<${TR.toFixed(2)}; }
 vec3 shade(vec3 alb, vec3 n, vec3 p, float spec, float sss){
@@ -130,12 +145,12 @@ vec3 shade(vec3 alb, vec3 n, vec3 p, float spec, float sss){
   vec3 V=normalize(uCam-p);
   float nd=dot(n,uSun);
   float shd=ih>0.99? 1.0 : sunShadow(p,n);
-  vec3 sunC=vec3(2.9,2.1,1.3);
+  vec3 sunC=uSunC;
   float back=pow(max(dot(-V,uSun),0.0),2.0);
   vec3 lo=alb*( sunC*shd*max(nd,0.0) + sunC*shd*sss*(0.45*max(-nd,0.0)+0.9*back)
-     + vec3(0.22,0.30,0.50)*(0.55+0.45*n.y)*(0.75+0.25*shd) + vec3(0.26,0.19,0.08)*(0.5-0.5*n.y) );
+     + uAmb*(vec3(0.22,0.30,0.50)*(0.55+0.45*n.y)*(0.75+0.25*shd) + vec3(0.26,0.19,0.08)*(0.5-0.5*n.y)) );
   vec3 H=normalize(uSun+V); lo+=sunC*shd*spec*pow(max(dot(n,H),0.0),48.0)*step(0.0,nd);
-  lo+=vec3(1.1,0.75,0.42)*spec*0.6*pow(1.0-max(dot(n,V),0.0),4.0)*(0.3+0.7*shd);
+  lo+=uAmb*vec3(1.1,0.75,0.42)*spec*0.6*pow(1.0-max(dot(n,V),0.0),4.0)*(0.3+0.7*shd);
   vec3 L=vec3(10.6,${TY.toFixed(1)},0.0)-p; float d=length(L); L/=d;
   float att=24.0/(8.0+d*d);
   float wrap=max(dot(n,L)*0.6+0.4,0.0);
@@ -189,7 +204,7 @@ function stick(a, b, r) {
 // ---------- sky ----------
 const sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 20), mat(`
 void main(){ vec3 dir=normalize(vL); float e=dir.y;
-  vec3 hz=hazeCol(dir), zen=vec3(0.07,0.17,0.46);
+  vec3 hz=hazeCol(dir), zen=vec3(0.07,0.17,0.46)*uHaze;
   vec3 c=mix(hz,zen,pow(clamp(e,0.,1.),0.5));
   float sd=max(dot(dir,uSun),0.);
   c+=vec3(1.5,0.85,0.35)*(pow(sd,5.)*0.35+pow(sd,60.)*1.4)+vec3(30.,22.,12.)*smoothstep(0.9992,0.9996,sd);
@@ -198,7 +213,7 @@ void main(){ vec3 dir=normalize(vL); float e=dir.y;
   float thick=fbm(cu*3.0);
   vec3 cloudC=mix(vec3(0.78,0.66,0.72), vec3(1.9,1.25,0.7), pow(sd,3.0))*(0.7+0.35*thick);
   cloudC+=vec3(2.2,1.2,0.5)*pow(sd,12.0)*(1.0-thick)*1.2;
-  c=mix(c, cloudC, cl*0.85);
+  c=mix(c, cloudC*uHaze, cl*0.85);
   float az=atan(dir.z,dir.x); vec2 ac=vec2(cos(az),sin(az));
   float hh=0.03+0.035*vnoise(ac*3.0+2.0)+0.012*vnoise(ac*11.0);
   c=mix(c, mix(vec3(0.20,0.24,0.20),hz,0.62), smoothstep(hh,hh-0.004,e));
@@ -578,7 +593,7 @@ const PAL = [
   { p: [0.80, 0.07, 0.03], c: [0.05, 0.03, 0.04], np: [5, 6], len: [3.4, 4.4] },
   { p: [0.16, 0.30, 0.85], c: [0.92, 0.85, 0.5], np: [5, 7], len: [2.2, 3.0] }];
 {
-  const place = (x, z) => { if (terrainH(x, z) < WY + 1.5 || Math.hypot(x, z) < 22) return; if (Math.hypot(x - LOG.c.x, z - LOG.c.z) < 30 || Math.abs(Math.hypot(x - ORCH.x, z - ORCH.z) - HEDGE_R) < 10) return; const ty = (Math.random() * PAL.length) | 0, T = PAL[ty];
+  const place = (x, z) => { if (terrainH(x, z) < WY + 1.5 || Math.hypot(x, z) < 22) return; if (Math.hypot(x - FOREST.x, z - FOREST.z) < FOREST.r + 14 || Math.hypot(x - LOG.c.x, z - LOG.c.z) < 30 || Math.abs(Math.hypot(x - ORCH.x, z - ORCH.z) - HEDGE_R) < 10) return; const ty = (Math.random() * PAL.length) | 0, T = PAL[ty];
     for (const f of flowers) if (Math.hypot(f.x - x, f.z - z) < 7) return;
     flowers.push({ x, z, y: terrainH(x, z) + rnd(9, 22), r: rnd(1.0, 1.7), T, np: Math.round(rnd(T.np[0], T.np[1])), len: rnd(T.len[0], T.len[1]), cool: 0, tilt: rnd(0.05, 0.45), ax: rnd(-0.12, 0.12), az: rnd(-0.12, 0.12), val: 1, orch: Math.hypot(x - ORCH.x, z - ORCH.z) < HEDGE_R }); };
   const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 1.15;
@@ -597,6 +612,21 @@ const PAL = [
     for (const [f] of g.slice(0, 5)) { f.val = 3; f.T = SUNPAL; f.np = 14; f.r = 1.4; f.y = Math.min(f.y, terrainH(f.x, f.z) + 9); } }
   { const H = HILLS[0]; flowers.push({ x: H.x, z: H.z, y: terrainH(H.x, H.z) + 30, r: 5.5, T: { p: [1.2, 0.72, 0.04], c: [0.22, 0.11, 0.03] }, np: 28, len: 12, cool: 0, tilt: 0.25, ax: 0.1, az: -0.05, val: 5, giant: true, sw: 3.5 }); }
   for (const sg of [-1, 1]) { const c = LOG.c.clone().addScaledVector(LOG.axis, sg * 9); flowers.push({ x: c.x, z: c.z, y: c.y - LOG.ri + 1.1, r: 0.8, T: { p: [0.6, 1.15, 0.8], c: [0.9, 1.0, 0.6] }, np: 7, len: 1.6, cool: 0, tilt: 0.2, ax: 0, az: 0, val: 2, inLog: true }); }
+  // round 6: pond lilies sitting on the pads (the pads are placed here so the lilies can sit on them)
+  { let guard = 0; while (PADS0.length < 11 && guard++ < 500) { const a = rnd(TAU), d = rnd(8, POND.r - 6), x = POND.x + Math.cos(a) * d, z = POND.z + Math.sin(a) * d; if (!overWater(x, z) || terrainH(x, z) > WY - 1.2) continue; if (PADS0.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 9)) continue; PADS0.push({ x, z, r: rnd(4, 7.5) }); }
+    const LILY = { p: [1.25, 1.12, 1.15], c: [1.1, 0.75, 0.1] }, LOTUS = { p: [1.3, 0.5, 0.72], c: [1.2, 0.85, 0.15] };
+    const big = PADS0.reduce((a, b) => (b.r > a.r ? b : a), PADS0[0]);
+    PADS0.forEach((p, i) => { if (i % 2 && p !== big) return; const lotus = p === big, a = rnd(TAU), o = p.r * 0.4;
+      flowers.push({ x: p.x + Math.cos(a) * o, z: p.z + Math.sin(a) * o, y: WY + (lotus ? 1.5 : 1.0), r: lotus ? 1.5 : 1.1, T: lotus ? LOTUS : LILY, np: lotus ? 16 : 11, len: lotus ? 2.4 : 1.7, cool: 0, tilt: 0.55, ax: 0, az: 0, val: lotus ? 3 : 2, zone: 'pond', lily: true }); });
+  }
+  // round 6: woodland flowers: violets low among the roots, foxgloves standing in the shade under the trees
+  { const VIOLET = { p: [0.55, 0.3, 1.05], c: [1.1, 0.85, 0.15] }, FOX = { p: [0.95, 0.35, 0.85], c: [1.0, 0.95, 0.85] }, fr = FOREST.rnd; let guard = 0, nv = 0, nf = 0;
+    while ((nv < 14 || nf < 5) && guard++ < 4000) { const a = fr(0, TAU), d = Math.sqrt(fr(0, 1)) * FOREST.r, x = FOREST.x + Math.cos(a) * d, z = FOREST.z + Math.sin(a) * d;
+      if (forestTrees.some(t => Math.hypot(t.x - x, t.z - z) < t.R + 4) || flowers.some(f => Math.hypot(f.x - x, f.z - z) < 6)) continue;
+      const fox = nf < 5 && forestTrees.some(t => Math.hypot(t.x - x, t.z - z) < t.cr * 0.8); if (!fox && nv >= 14) continue;
+      const gy = terrainH(x, z); if (fox) nf++; else nv++;
+      flowers.push({ x, z, y: gy + (fox ? fr(14, 19) : fr(2.5, 4.5)), r: fox ? 1.2 : 0.9, T: fox ? FOX : VIOLET, np: fox ? 9 : 5, len: fox ? 2.0 : 1.5, cool: 0, tilt: fox ? 0.5 : 0.25, ax: fr(-0.1, 0.1), az: fr(-0.1, 0.1), val: fox ? 3 : 2, zone: 'forest', fox }); }
+  }
   const pg = new THREE.PlaneGeometry(1, 1, 6, 4); pg.rotateX(-Math.PI / 2); pg.translate(0.5, 0, 0);
   { const p = pg.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); const prof = Math.sin(Math.PI * Math.pow(x, 0.62)) * 0.9 + 0.12; p.setZ(i, z * prof); p.setY(i, 0.22 * x * x - 0.5 * z * z * prof + Math.sin(x * 9) * 0.01); } pg.computeVertexNormals(); }
   const totalP = flowers.reduce((s, f) => s + f.np, 0);
@@ -611,6 +641,7 @@ const PAL = [
     gl_FragColor=vec4(finish(c,vW),1.0); }`, { side: THREE.DoubleSide });
   const swayV = (stem, centre) => SWAYGLSL + VERT.replace('vec4 w = m*vec4(position,1.0);', `vec4 w = m*vec4(position,1.0); vec2 o=vec2(m[3][0],m[3][2])${centre ? '' : ''}; w.xz += sway(o)*aSway${stem ? '*position.y*position.y' : ''};`);
   petalMat.vertexShader = swayV(false);
+  petalMat.vertexShader = 'uniform float uClose;\n' + petalMat.vertexShader.replace('vec4 w = m*vec4(position,1.0);', 'vec3 pc=position; float ca=uClose*1.2; pc=vec3(pc.x*cos(ca)-pc.y*sin(ca), pc.x*sin(ca)+pc.y*cos(ca), pc.z*(1.0-0.5*uClose)); vec4 w = m*vec4(pc,1.0);');
   const petals = new THREE.InstancedMesh(pg, petalMat, totalP); petals.frustumCulled = false;
   const cen = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 8), mat(`void main(){ vec3 n=NORMAL; float dots=vnoise(vL.xz*22.0); vec3 alb=vC*(0.55+0.8*dots); n=normalize(n+(dots-0.5)*0.6);
     gl_FragColor=vec4(finish(shade(alb,n,vW,0.1,0.3),vW),1.0); }`, { vert: swayV(false) }), flowers.length); cen.frustumCulled = false;
@@ -619,7 +650,7 @@ const PAL = [
   const m = new M4(), q = new Q4(), e = new THREE.Euler(), col = new THREE.Color(); let pi = 0;
   const swP = new Float32Array(totalP), swF = new Float32Array(flowers.length);
   flowers.forEach((f, i) => {
-    f.sway = f.giant ? 0.25 : (f.val >= 3 || f.inLog || f.canopy) ? 0 : 1; swF[i] = f.sway;
+    f.sway = f.giant ? 0.25 : (f.val >= 3 || f.inLog || f.canopy) ? 0 : f.lily ? 0.3 : 1; swF[i] = f.sway;
     const gy = terrainH(f.x, f.z);
     m.compose(new V3(f.x, gy - 0.5, f.z), q.identity(), new V3(f.sw || 1, f.y - gy + 0.3, f.sw || 1)); stems.setMatrixAt(i, m);
     const hq = new Q4().setFromEuler(new THREE.Euler(f.ax, 0, f.az));
@@ -661,8 +692,8 @@ const pads = [];
     vec3 alb=mix(vec3(0.07,0.26,0.05),vec3(0.20,0.42,0.08),veins+0.3*vnoise(vL.xz*5.0)); alb=mix(alb,vec3(0.30,0.20,0.06),smoothstep(0.9,1.0,r)*0.6);
     gl_FragColor=vec4(finish(shade(alb,n,vW,0.9,0.4),vW),1.0); }`, { side: THREE.DoubleSide });
   const padG = new THREE.CylinderGeometry(1, 1, 0.08, 36);
-  let guard = 0; while (pads.length < 11 && guard++ < 500) { const a = rnd(TAU), d = rnd(8, POND.r - 6), x = POND.x + Math.cos(a) * d, z = POND.z + Math.sin(a) * d; if (!overWater(x, z) || terrainH(x, z) > WY - 1.2) continue; if (pads.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 9)) continue;
-    const r = rnd(4, 7.5), m = new THREE.Mesh(padG, padM); m.position.set(x, WY + 0.06, z); m.scale.set(r, 1, r); m.rotation.y = rnd(TAU); m.renderOrder = 3; scene.add(m); pads.push({ x, z, r, mesh: m, dip: 0 }); }
+  let guard = 0; for (const p0 of PADS0) { const x = p0.x, z = p0.z;
+    const r = p0.r, m = new THREE.Mesh(padG, padM); m.position.set(x, WY + 0.06, z); m.scale.set(r, 1, r); m.rotation.y = rnd(TAU); m.renderOrder = 3; scene.add(m); pads.push({ x, z, r, mesh: m, dip: 0 }); }
   // reeds
   const N = 260, rg = new THREE.CylinderGeometry(0.1, 0.16, 1, 5); rg.translate(0, 0.5, 0); const reeds = new THREE.InstancedMesh(rg, simple('0.16,0.30,0.06', 0.2, 0.6), N), heads = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), simple('0.22,0.11,0.04', 0.05, 0.2), N);
   const m = new M4(), q = new Q4(); let n = 0; guard = 0;
@@ -800,6 +831,93 @@ const webs = [];
     m.scale.setScalar(r); m.position.copy(c); m.lookAt(c.clone().add(n)); scene.add(m);
     webs.push({ c, n, r, mesh: m, torn: 0 });
   }
+}
+const WEB_FRAG = `uniform float uR;
+      void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW);
+        float r=length(vL.xy), a=atan(vL.y,vL.x), rr=r*uR;
+        float dsp=abs(sin(a*8.0))*rr; float spoke=1.0-smoothstep(0.015,0.06,dsp);
+        float dr=abs(fract(rr/0.85+a/6.2832)-0.5)*0.85; float ring=(1.0-smoothstep(0.012,0.05,dr))*step(0.12,r);
+        float line=max(spoke,ring)*smoothstep(1.0,0.9,r);
+        float dew=step(0.985,hash21(floor(vL.xy*uR*4.0)))*line;
+        float sp=pow(max(dot(reflect(-V,n),uSun),0.0),6.0)+pow(max(dot(-V,uSun),0.0),8.0);
+        vec3 c=vec3(0.85,0.85,0.8)*(0.35+3.5*sp)+vec3(2.5,2.0,1.4)*dew*(0.4+3.0*sp);
+        float al=line*(0.30+0.6*sp)+dew; if(al<0.01) discard;
+        gl_FragColor=vec4(finish(c,vW),clamp(al,0.0,1.0)); }`;
+// ================= ROUND 6: the forest edge, life on the pond, scent stones =================
+const forestLeafMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.35+vW.y*0.3); float b=vnoise(vW.xz*2.1+vW.y*1.7);
+  n=normalize(n+(vec3(fbm(vW.yz*1.5),fbm(vW.xz*1.5),fbm(vW.xy*1.5))-0.5)*1.3);
+  vec3 alb=mix(vec3(0.03,0.09,0.02),vec3(0.20,0.34,0.05),a)*(0.75+0.45*b); alb=mix(alb,vec3(0.45,0.38,0.06),smoothstep(0.8,0.95,b)*0.5);
+  gl_FragColor=vec4(finish(shade(alb,n,vW,0.03,0.9),vW),1.0); }`);
+{
+  const blobs = [], fr = FOREST.rnd;
+  for (const t of forestTrees) {
+    const H = t.top - t.gy + 3, g = new THREE.CylinderGeometry(t.R * 0.6, t.R * 1.35, H, 12, 6); g.translate(0, H / 2 - 3, 0);
+    const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) + Math.sin(y * 0.11 + t.x) * 0.7); p.setZ(i, p.getZ(i) + Math.cos(y * 0.09 + t.z) * 0.6); } g.computeVertexNormals();
+    const m = new THREE.Mesh(g, barkMat); m.position.set(t.x, t.gy, t.z); scene.add(m);
+    blobs.push(...t.blobs);
+  }
+  const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), forestLeafMat, blobs.length), m4 = new M4(), q = new Q4();
+  blobs.forEach((b, i) => { q.setFromEuler(new THREE.Euler(fr(-0.3, 0.3), fr(0, TAU), fr(-0.3, 0.3))); m4.compose(new V3(b[0], b[1], b[2]), q, new V3(b[3], b[4], b[3])); im.setMatrixAt(i, m4); });
+  im.frustumCulled = false; scene.add(im);
+  // webs strung between close trunks
+  let n = 0;
+  for (let i = 0; i < forestTrees.length && n < 6; i++) { const t = forestTrees[i]; let best = null, bd = 1e9;
+    for (let j = i + 1; j < forestTrees.length; j++) { const u = forestTrees[j], d = Math.hypot(t.x - u.x, t.z - u.z); if (d < bd) { bd = d; best = u; } }
+    if (!best || bd > 30) continue; const r = Math.min(8, bd / 2 - Math.max(t.R, best.R) - 0.8); if (r < 3) continue;
+    const sx = (t.x + best.x) / 2, sz = (t.z + best.z) / 2, c = new V3(sx, terrainH(sx, sz) + r + fr(2, 10), sz), nrm = new V3(-(best.z - t.z), 0, best.x - t.x).normalize();
+    const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), mat(WEB_FRAG, { uniforms: { uR: { value: r } }, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    m.scale.setScalar(r); m.position.copy(c); m.lookAt(c.clone().add(nrm)); scene.add(m); webs.push({ c, n: nrm, r, mesh: m, torn: 0, zone: 'forest' }); n++; }
+  // foxglove bells hanging down the spikes
+  const foxes = flowers.filter(f => f.fox), bellG = new THREE.CylinderGeometry(0.26, 0.78, 1.6, 12, 2, true); bellG.translate(0, -0.8, 0);
+  const bellM = mat(`void main(){ vec3 n=NORMAL; float inner=gl_FrontFacing?0.0:1.0; float sp=step(0.68,vnoise(vL.xz*9.0+vL.y*7.0))*inner;
+    vec3 alb=mix(vec3(0.62,0.16,0.48),vec3(0.95,0.82,0.9),inner*0.6); alb=mix(alb,vec3(0.28,0.03,0.12),sp);
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.15,0.9),vW),1.0); }`, { side: THREE.DoubleSide });
+  const bells = new THREE.InstancedMesh(bellG, bellM, Math.max(1, foxes.length * 9)); let k = 0;
+  for (const f of foxes) for (let i = 0; i < 9; i++) { const a = i * 2.4 + f.x, o = 0.7, s = 1 - i * 0.025;
+    q.setFromAxisAngle(new V3(Math.sin(a), 0, -Math.cos(a)), 0.55); m4.compose(new V3(f.x + Math.cos(a) * o, f.y - 1.6 - i * 0.95, f.z + Math.sin(a) * o), q, new V3(s, s, s)); bells.setMatrixAt(k++, m4); }
+  bells.count = k; bells.frustumCulled = false; scene.add(bells);
+}
+// scent stones: leave honey here and your sisters scout a new place
+const ZONES = {
+  garden: { name: 'The walled garden', lname: 'the walled garden', cost: 20, c: ORCH, ring: HEDGE_R + 6, at: (() => { const a = HEDGE_GAPS[0]; return [ORCH.x + Math.cos(a) * (HEDGE_R + 20), ORCH.z + Math.sin(a) * (HEDGE_R + 20)]; })() },
+  pond: { name: 'The lily pond', lname: 'the lily pond', cost: 60, c: POND, ring: POND.r + 26, at: (() => { const d = Math.hypot(POND.x, POND.z); return [POND.x - POND.x / d * (POND.r + 36), POND.z - POND.z / d * (POND.r + 36)]; })() },
+  forest: { name: 'The forest edge', lname: 'the forest edge', cost: 120, c: FOREST, ring: FOREST.r + 12, at: (() => { const d = Math.hypot(FOREST.x, FOREST.z); return [FOREST.x - FOREST.x / d * (FOREST.r + 24), FOREST.z - FOREST.z / d * (FOREST.r + 24)]; })() },
+};
+{
+  const stoneM = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.8+vW.y*0.6); vec3 alb=mix(vec3(0.42,0.39,0.34),vec3(0.74,0.70,0.62),a);
+    alb=mix(alb,vec3(0.18,0.30,0.08),smoothstep(0.55,0.75,fbm(vW.xy*0.5+3.0))*smoothstep(0.0,0.6,n.y+0.3)*0.6);
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.1,0.0),vW),1.0); }`);
+  const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'), g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,200,90,1)'); g.addColorStop(0.3, 'rgba(255,170,50,.35)'); g.addColorStop(1, 'rgba(255,150,30,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+  for (const [id, z] of Object.entries(ZONES)) {
+    const [x, zz] = z.at, gy = terrainH(x, zz), top = gy + 6.2;
+    const g = new THREE.IcosahedronGeometry(1, 2); const m = new THREE.Mesh(g, stoneM); m.position.set(x, gy + 1.2, zz); m.scale.set(5, 5, 4.4); m.rotation.y = x; scene.add(m);
+    const wm = mat(`uniform float uOn; void main(){ vec3 n=NORMAL; vec2 h=vL.xz*3.0; float cell=abs(sin(h.x*3.0)*sin(h.y*3.0+h.x*1.5)); vec3 alb=vec3(0.9,0.55,0.12)*(0.7+0.3*cell);
+      vec3 c=shade(alb,n,vW,0.8,1.0)+vec3(2.4,1.3,0.35)*uOn*(0.7+0.3*sin(uTime*2.5)); gl_FragColor=vec4(finish(c,vW),1.0); }`, { uniforms: { uOn: { value: 1 } } });
+    const wax = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 0.5, 6), wm); wax.position.set(x, top - 0.1, zz); scene.add(wax);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 })); glow.position.set(x, top + 1.5, zz); glow.scale.setScalar(14); scene.add(glow);
+    const c = document.createElement('canvas'); c.width = 512; c.height = 160; const ctx = c.getContext('2d'), tex = new THREE.CanvasTexture(c);
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, color: 0xffffff })); label.renderOrder = 20; label.position.set(x, top + 9, zz); label.scale.set(24, 7.5, 1); scene.add(label);
+    z.draw = (a, b) => { ctx.clearRect(0, 0, 512, 160); ctx.textAlign = 'center'; ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 12;
+      ctx.font = 'italic 56px Georgia, serif'; ctx.fillStyle = '#fff1d6'; ctx.fillText(a, 256, 66); ctx.font = '44px Georgia, serif'; ctx.fillStyle = '#ffc860'; ctx.fillText(b, 256, 132); tex.needsUpdate = true; };
+    z.draw(z.name, `${z.cost} honey`);
+    Object.assign(z, { x, z: zz, top, wax: wm, glow, label, pay: 0 });
+  }
+}
+// dragonflies: fast hunters that patrol the pond
+const dragonflies = [];
+{
+  const body = geoParts([
+    { g: ell(0.15, 0.15, 1.9, 0, 0, -1.95, 10), c: (x, y, z) => Math.sin(z * 7) > 0.55 ? [0.04, 0.08, 0.1] : [0.08, 0.5, 0.58] },
+    { g: ell(0.32, 0.3, 0.5, 0, 0, 0.1, 12), c: [0.1, 0.42, 0.32] },
+    { g: ell(0.26, 0.24, 0.22, 0.2, 0.05, 0.62, 10), c: [0.3, 0.08, 0.04] }, { g: ell(0.26, 0.24, 0.22, -0.2, 0.05, 0.62, 10), c: [0.3, 0.08, 0.04] }]);
+  const bm = mat(`void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW); float ir=pow(1.0-max(dot(n,V),0.0),2.0); vec3 alb=vC+vec3(0.1,0.3,0.45)*ir; gl_FragColor=vec4(finish(shade(alb,n,vW,0.9,0.1),vW),1.0); }`, { vertexColors: true });
+  const wg = new THREE.CircleGeometry(1, 16); wg.scale(1.7, 0.27, 1); wg.translate(1.75, 0, 0); wg.rotateX(-Math.PI / 2);
+  const wm = mat(`void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW); float v=pow(abs(sin(vL.x*14.0)*sin(vL.z*30.0)),12.0); float fr=pow(1.0-abs(dot(n,V)),2.0);
+    vec3 c=vec3(0.8,0.9,1.0)*(0.3+0.7*fr+0.5*v); gl_FragColor=vec4(finish(c,vW),0.16+0.35*fr+0.3*v); }`, { transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  for (let i = 0; i < 2; i++) { const g = new THREE.Group(); g.add(new THREE.Mesh(body, bm)); const wings = [];
+    for (const [sx, zo] of [[1, 0.28], [-1, 0.28], [1, -0.12], [-1, -0.12]]) { const w = new THREE.Mesh(wg, wm); w.position.set(0, 0.24, zo); w.scale.x = sx; g.add(w); wings.push(w); }
+    g.scale.setScalar(1.3); g.visible = false; scene.add(g);
+    dragonflies.push({ g, wings, p: new V3(POND.x + (i ? 20 : -20), WY + 6, POND.z), v: new V3(), state: 'patrol', t: 0, next: 0, cd: 2, tgt: new V3(POND.x, WY + 6, POND.z), face: new V3(0, 0, 1) }); }
 }
 // wasps: slimmer, brighter, meaner-looking cousins of the bees
 const waspMat = new THREE.ShaderMaterial({ uniforms: beeMat.uniforms, vertexShader: beeMat.vertexShader, vertexColors: true,
@@ -1001,6 +1119,7 @@ function collide(p, v) {
   { const dx = p.x - ORCH.x, dz = p.z - ORCH.z, dO = Math.hypot(dx, dz);
     if (!G.orchard) { const lim = HEDGE_R + 6; if (dO < lim) { const k = lim / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; const vr = (v.x * dx + v.z * dz) / dO; if (vr < 0) { v.x -= vr * dx / dO * 1.6; v.z -= vr * dz / dO * 1.6; } windHint(); } }
     else if (Math.abs(dO - HEDGE_R) < 8.5 + PR && p.y < terrainH(p.x, p.z) + 37 && !inHedgeGap(Math.atan2(dz, dx)) && !(Math.abs(Math.atan2(Math.sin(Math.atan2(dz, dx) - HEDGE_TUN), Math.cos(Math.atan2(dz, dx) - HEDGE_TUN))) < 0.06 && p.y < terrainH(p.x, p.z) + 5.5)) { const t = HEDGE_R + (dO > HEDGE_R ? 1 : -1) * (8.5 + PR), k = t / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; } }
+  zoneWalls(p, v); forestCollide(p, v);
   for (const t of orchTrees) { const dx = p.x - t.x, dz = p.z - t.z, dh = Math.hypot(dx, dz); if (dh > t.cr * 1.6 + 3) continue;
     if (p.y < t.top - t.cr * 0.3 && dh < t.R + PR + 0.8) { const k = (t.R + PR + 0.8) / Math.max(dh, 0.01); p.x = t.x + dx * k; p.z = t.z + dz * k; }
     if (t.blobs) for (const b of t.blobs) { const bx = p.x - b[0], by = (p.y - b[1]) * b[3] / b[4], bz = p.z - b[2], dd = Math.hypot(bx, by, bz), rr = b[3] * 1.02 + PR; if (dd < rr) { const k = rr / Math.max(dd, 0.01); p.x = b[0] + bx * k; p.y = b[1] + by * k * b[4] / b[3]; p.z = b[2] + bz * k; v.multiplyScalar(0.7); } } }
@@ -1070,9 +1189,9 @@ function update(dt) {
     collide(P.pos, P.vel);
     P.landed = null;
     if (!inHive) {
-      for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (flowerHit(f, d, dt)) {
-        if (f.rich > 0 && !(f.orch && !G.orchard)) richSip(f, dt); else if (f.giant) { if (f.cool <= 0 && P.pollen < G.cap) giantSip(f, dt); } else if (f.val >= 2) { if (f.cool <= 0 && P.pollen < G.cap && !(f.orch && !G.orchard)) dwellSip(f, dt); } else
-        if (f.cool <= 0 && P.pollen < G.cap && !(f.orch && !G.orchard)) { f.cool = f.val >= 3 ? 70 : 25; addPollen(f); tone(SCALE[Math.min(7, P.pollen - 1)], 0.13, 2.2); _v.set(f.x, f.y + 0.6, f.z); puff(_v, 26, [1.0, 0.82, 0.25], 2.2, 0.012, 1.8, 0.6, 0.8); } } if (f.cool > 0) f.cool -= dt; }
+      for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (flowerHit(f, d, dt) && !flowersClosed()) {
+        if (f.rich > 0 && !zoneLocked(f)) richSip(f, dt); else if (f.giant) { if (f.cool <= 0 && P.pollen < G.cap) giantSip(f, dt); } else if (f.val >= 2) { if (f.cool <= 0 && P.pollen < G.cap && !zoneLocked(f)) dwellSip(f, dt); } else
+        if (f.cool <= 0 && P.pollen < G.cap && !zoneLocked(f)) { f.cool = f.val >= 3 ? 70 : 25; addPollen(f); tone(SCALE[Math.min(7, P.pollen - 1)], 0.13, 2.2); _v.set(f.x, f.y + 0.6, f.z); puff(_v, 26, [1.0, 0.82, 0.25], 2.2, 0.012, 1.8, 0.6, 0.8); } } if (f.cool > 0) f.cool -= dt; }
       for (const s of shrooms) { shroomSolid(s); tmp.set(P.pos.x - s.x, (P.pos.y - s.y) / 0.7, P.pos.z - s.z); const d = tmp.length(); if (d < s.R + 0.45 && tmp.y > -0.2) { tmp.normalize(); P.pos.set(s.x + tmp.x * (s.R + 0.45), s.y + tmp.y * (s.R + 0.45) * 0.7, s.z + tmp.z * (s.R + 0.45)); P.vel.addScaledVector(tmp, 17); P.vel.y += 6; s.sq = 1; sweep(170, 420, 0.25, 0.12); sweep(420, 260, 0.5, 0.06); } s.sq = Math.max(0, s.sq - dt * 2.5); const k = 1 - Math.sin(s.sq * Math.PI) * 0.25 * s.sq; s.mesh.scale.set(s.R * (2 - k), s.R * 0.7 * k, s.R * (2 - k)); }
       // water
       const ow = overWater(P.pos.x, P.pos.z), alt = P.pos.y - WY;
@@ -1097,7 +1216,7 @@ function update(dt) {
     }
     if (P.deliver > 0) {
       P.deliver += dt; greeters.forEach((g, i) => { g.tp.copy(P.pos).addScaledVector(fwd, 1.25).addScaledVector(right, (i - 1) * 0.75); g.tp.y += (i === 1 ? 0.28 : -0.12) + Math.sin(time * 2 + i) * 0.05; });
-      if (P.deliver > 1.2 && P.pollen > 0 && P.deliver > 1.2 + (P.given || 0) * 0.45) { P.given = (P.given || 0) + 1; gainHoney(P.load.pop() || 1); P.pollen = P.load.length; pulse = 1; tone(SCALE[Math.min(7, P.given + 1)], 0.12, 2.5); tone(SCALE[Math.min(7, P.given + 1)] / 2, 0.06, 2.5); try { localStorage.setItem('honeylight.honey', P.honey.toFixed(3)); } catch (e) { } }
+      if (P.deliver > 1.2 && P.pollen > 0 && P.deliver > 1.2 + (P.given || 0) * 0.45) { P.given = (P.given || 0) + 1; gainHoney(dayCount(P.load.pop() || 1)); P.pollen = P.load.length; pulse = 1; tone(SCALE[Math.min(7, P.given + 1)], 0.12, 2.5); tone(SCALE[Math.min(7, P.given + 1)] / 2, 0.06, 2.5); try { localStorage.setItem('honeylight.honey', P.honey.toFixed(3)); } catch (e) { } }
       if (P.pollen === 0 && P.deliver > 2.2 + (P.given || 0) * 0.45) { P.deliver = 0; P.given = 0; greeters.forEach(g => g.active = false); tone(523.25, 0.08, 3.5); tone(659.25, 0.08, 3.5, 'sine', 0.1); tone(783.99, 0.08, 3.5, 'sine', 0.2); }
     }
     bob += dt * 2.2;
@@ -1157,10 +1276,10 @@ function update(dt) {
 }
 resetCap();
 // ================= GAME: progression, threats, choices =================
-const G = { honey: 0, workers: 0, cap: 4, speed: 1, weight: 1, orchard: false, passive: 0, toastT: 0, richT: 12, seenRich: false, seenWasp: false, seenWeb: false, windHintT: 0 };
+const G = { spent: 0, zones: {}, honey: 0, workers: 0, cap: 4, speed: 1, weight: 1, orchard: false, passive: 0, toastT: 0, richT: 12, seenRich: false, seenWasp: false, seenWeb: false, windHintT: 0 };
 const UNLOCKS = [
   { at: 8, name: 'Bigger pollen baskets', desc: 'carry 6 pollen', apply: () => G.cap = 6 },
-  { at: 20, name: 'The orchard gate opens', desc: 'the hedge winds have calmed. Follow the stone posts', apply: () => G.orchard = true },
+  { at: 20, name: 'The scent stones wake', desc: 'leave honey at a glowing stone and your sisters scout a new place', apply: () => { } },
   { at: 35, name: 'Strong wings', desc: 'faster flight, pollen feels lighter', apply: () => { G.speed = 1.15; G.weight = 0.55; } },
   { at: 55, name: 'Great pollen baskets', desc: 'carry 8 pollen', apply: () => G.cap = 8 },
   { at: 80, name: 'A sister flies with you', desc: 'when a wasp comes for you, she draws it away', apply: () => G.escorts = Math.max(G.escorts, 1) },
@@ -1170,8 +1289,8 @@ const UNLOCKS = [
   { at: 250, name: 'The hive glows gold', desc: 'every comb brimming with honey', apply: () => { } },
 ];
 P.load = [];
-try { const s = JSON.parse(localStorage.getItem('honeylight.save2') || 'null'); if (s) { G.honey = s.honey | 0; G.workers = s.workers | 0; } else G.honey = Math.round((P.honey || 0) * 20); } catch (e) { }
-function save() { try { localStorage.setItem('honeylight.save2', JSON.stringify({ honey: G.honey, workers: G.workers })); } catch (e) { } }
+try { const s = JSON.parse(localStorage.getItem('honeylight.save2') || 'null'); if (s) { G.honey = s.honey | 0; G.workers = s.workers | 0; G.spent = s.spent | 0; G.zones = s.zones || (G.honey >= 20 ? { garden: true } : {}); G.daySave = s.day || null; } else { G.honey = Math.round((P.honey || 0) * 20); G.zones = G.honey >= 20 ? { garden: true } : {}; } } catch (e) { }
+function save() { try { localStorage.setItem('honeylight.save2', JSON.stringify({ honey: G.honey, workers: G.workers, spent: G.spent, zones: G.zones, day: typeof DAY === 'object' && DAY ? DAY.save() : undefined })); } catch (e) { } }
 addEventListener('pagehide', save); setInterval(() => { if (P.mode === 'fly' || P.mode === 'crawl') save(); }, 15000);
 function applyUnlocks(announce) { for (const u of UNLOCKS) if (G.honey >= u.at && !u.done) { u.done = true; u.apply(); if (announce) { toast(`<b>${u.name}</b><br><span>${u.desc}</span>`, 6); [0, 2, 4, 7].forEach((n, i) => tone(SCALE[n], 0.1, 2.6, 'sine', i * 0.12)); } } }
 for (let i = 0; i < G.workers; i++) makeForager();
@@ -1199,8 +1318,8 @@ function updateHud(dt) {
   hud.style.opacity = show ? 1 : 0;
   let pips = ''; for (let i = 0; i < G.cap; i++) pips += i < P.load.length ? `<i class="on${P.load[i] > 1 ? ' gold' : ''}"></i>` : '<i></i>';
   const nu = nextUnlock(), chasing = wasps.some(w => w.state === 'chase'), coming = !chasing && wasps.some(w => w.state === 'approach' && w.t > 0 && w.p.distanceTo(P.pos) < 70);
-  const html = `<div class="row"><span class="jar"></span><b>${G.honey}</b> honey <span class="dim">· ${G.workers} sister${G.workers === 1 ? '' : 's'} foraging${G.escorts ? ` · ${G.escorts} flying with you` : ''}</span></div><div class="row pips">${pips}</div>` +
-    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : coming ? '<div class="row warn">wasps are coming...</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '') + (G.holdT > 0.2 && time - (G.holdF ? G.holdF.lastLand : 0) < 0.3 ? `<div class="row warn">hold on... ${'●'.repeat(Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4)))}</div>` : '') + (G.dart || G.leap ? `<div class="row dim">${G.dart ? `<kbd>Q</kbd> dart ${G.dartCD <= 0 ? '●' : '○'}` : ''}${G.leap ? ` &nbsp; <kbd>E</kbd> leap ${G.leapCD <= 0 ? '●' : '○'}` : ''}</div>` : '') + (MOB.active && P.pos.distanceTo(MOB.anchor) > 12 ? '<div class="row warn">a sister needs help: follow the red glow</div>' : '') + (GIANT && GIANT.cool > 0 && Math.hypot(P.pos.x - GIANT.x, P.pos.z - GIANT.z) < 30 ? '<div class="row dim">the great sunflower is refilling</div>' : '');
+  const html = `<div class="row"><span class="jar"></span><b>${G.honey}</b> honey <span class="dim">(${stores()} stored) · ${G.workers} sister${G.workers === 1 ? '' : 's'} foraging${G.escorts ? ` · ${G.escorts} flying with you` : ''}</span></div><div class="row pips">${pips}</div>` +
+    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : coming ? '<div class="row warn">wasps are coming...</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '') + (G.holdT > 0.2 && time - (G.holdF ? G.holdF.lastLand : 0) < 0.3 ? `<div class="row warn">hold on... ${'●'.repeat(Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4)))}</div>` : '') + (G.dart || G.leap ? `<div class="row dim">${G.dart ? `<kbd>Q</kbd> dart ${G.dartCD <= 0 ? '●' : '○'}` : ''}${G.leap ? ` &nbsp; <kbd>E</kbd> leap ${G.leapCD <= 0 ? '●' : '○'}` : ''}</div>` : '') + (MOB.active && P.pos.distanceTo(MOB.anchor) > 12 ? '<div class="row warn">a sister needs help: follow the red glow</div>' : '') + (GIANT && GIANT.cool > 0 && Math.hypot(P.pos.x - GIANT.x, P.pos.z - GIANT.z) < 30 ? '<div class="row dim">the great sunflower is refilling</div>' : '') + (P.mode !== 'rest' ? `<div class="row ${DAY.t > 0.78 ? 'warn' : 'dim'}">day ${DAY.n} · ${timeOfDay()}</div>` : '') + (G.payZ && time - G.payLast < 0.3 ? `<div class="row warn">leaving honey for the scouts... ${'●'.repeat(Math.ceil(G.payZ.pay / 1.6 * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.payZ.pay / 1.6 * 4)))}</div>` : '');
   if (html !== hudCache) { hud.innerHTML = html; hudCache = html; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) toastEl.style.opacity = 0; }
 }
@@ -1219,7 +1338,7 @@ function updateRich(dt) {
   }
   if (G.richT <= 0) {
     G.richT = rnd(18, 30); const slot = richGlows.find(g => !g.f);
-    if (slot) { for (let k = 0; k < 30; k++) { const f = flowers[(Math.random() * flowers.length) | 0]; if (f.val > 1 || f.rich > 0 || f.cool > 0 || f.inLog) continue; if (f.orch && !G.orchard) continue; const d = Math.hypot(f.x - P.pos.x, f.z - P.pos.z); if (d < 50 || d > 280) continue;
+    if (slot) { for (let k = 0; k < 30; k++) { const f = flowers[(Math.random() * flowers.length) | 0]; if (f.val > 1 || f.rich > 0 || f.cool > 0 || f.inLog) continue; if (zoneLocked(f) || f.zone || flowersClosed()) continue; const d = Math.hypot(f.x - P.pos.x, f.z - P.pos.z); if (d < 50 || d > 280) continue;
       f.rich = f.rich0 = rnd(26, 34); slot.f = f; if (!G.seenRich && P.mode === 'fly' && !inHive) { G.seenRich = true; toast('<b>A flower is overflowing with nectar</b><br><span>look for the golden glow, but it won\'t last</span>', 6); } break; } }
   }
 }
@@ -1495,7 +1614,7 @@ function mobUpdate(w, d, flying, dt) {
 }
 function startMob() {
   _v.set(fwd.x, 0, fwd.z); if (_v.lengthSq() < 0.01) _v.set(1, 0, 0); _v.normalize().applyAxisAngle(YA, rnd(-0.9, 0.9)).multiplyScalar(rnd(45, 70)).add(P.pos);
-  if (Math.hypot(_v.x, _v.z) > 300 || overWater(_v.x, _v.z) || (!G.orchard && Math.hypot(_v.x - ORCH.x, _v.z - ORCH.z) < HEDGE_R + 10)) return false;
+  if (Math.hypot(_v.x, _v.z) > 300 || overWater(_v.x, _v.z) || zoneBlocked(_v.x, _v.z)) return false;
   MOB.anchor.set(_v.x, terrainH(_v.x, _v.z) + rnd(7, 12), _v.z); MOB.active = true; MOB.t = 0; MOB.home = false; MOB.sis.p.copy(MOB.anchor);
   for (const w of wasps) if (w.mob) { w.state = 'mob'; w.t = 0; w.p.copy(MOB.anchor).add(new V3(rnd(-3, 3), rnd(-1, 2), rnd(-3, 3))); w.v.set(0, 0, 0); }
   toast('<b>A sister is in trouble!</b><br><span>wasps are mobbing her. Hit them hard and fast to drive them off</span>', 5); return true;
@@ -1530,7 +1649,134 @@ function shroomSolid(s) {
   if (y > s.gy - 1 && y < s.y && d < stemR) { const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; P.pos.x = s.x + nx * stemR; P.pos.z = s.z + nz * stemR; const vn = P.vel.x * nx + P.vel.z * nz; if (vn < 0) { P.vel.x -= vn * nx; P.vel.z -= vn * nz; } }
   if (d < s.R + br * 0.5 && y < s.y + 0.05 && y > s.y - 0.5 - br) { P.pos.y = s.y - 0.5 - br; if (P.vel.y > 0) P.vel.y = -P.vel.y * 0.2; }
 }
-function updateRound5(dt) { updateMob(dt); updateAimShadow(); waspAudio(); }
+// ================= ROUND 6: scouting new places, the day's light, nightfall =================
+const stores = () => G.honey - (G.spent || 0);
+const zoneLocked = f => (f.orch && !G.orchard) || (f.zone && !G.zones[f.zone]);
+function zoneBlocked(x, z) { for (const [id, Z] of Object.entries(ZONES)) if (!G.zones[id] && Math.hypot(x - Z.c.x, z - Z.c.z) < Z.ring + 10) return true; return false; }
+function zoneWalls(p, v) {
+  for (const id of ['pond', 'forest']) { if (G.zones[id]) continue; const Z = ZONES[id], dx = p.x - Z.c.x, dz = p.z - Z.c.z, d = Math.hypot(dx, dz); if (d >= Z.ring) continue;
+    const k = Z.ring / Math.max(d, 0.01); p.x = Z.c.x + dx * k; p.z = Z.c.z + dz * k; const vr = (v.x * dx + v.z * dz) / Math.max(d, 0.01); if (vr < 0) { v.x -= vr * dx / d * 1.6; v.z -= vr * dz / d * 1.6; }
+    if (time > (G.zoneHintT || 0)) { G.zoneHintT = time + 8; toast(`<b>A stiff breeze turns you back</b><br><span>your sisters haven't scouted ${Z.lname} yet. Leave ${Z.cost} honey at the glowing stone</span>`, 5); } }
+  // the scent stones themselves are solid: land on the wax
+  for (const Z of Object.values(ZONES)) { const dx = p.x - Z.x, dz = p.z - Z.z, d = Math.hypot(dx, dz); if (d < 5.2 && p.y < Z.top + PR) { if (d > 4.2) { const k = 5.2 / Math.max(d, 0.01); p.x = Z.x + dx * k; p.z = Z.z + dz * k; } else { p.y = Z.top + PR; v.y = Math.max(v.y, 0); } } }
+}
+function forestCollide(p, v) {
+  if (Math.hypot(p.x - FOREST.x, p.z - FOREST.z) > FOREST.r + 40) return;
+  for (const t of forestTrees) { const dx = p.x - t.x, dz = p.z - t.z, dh = Math.hypot(dx, dz); if (dh > t.cr * 1.6 + 3) continue;
+    if (p.y < t.top - t.cr * 0.3 && dh < t.R + PR + 0.8) { const k = (t.R + PR + 0.8) / Math.max(dh, 0.01); p.x = t.x + dx * k; p.z = t.z + dz * k; }
+    for (const b of t.blobs) { const bx = p.x - b[0], by = (p.y - b[1]) * b[3] / b[4], bz = p.z - b[2], dd = Math.hypot(bx, by, bz), rr = b[3] * 1.02 + PR; if (dd < rr) { const k = rr / Math.max(dd, 0.01); p.x = b[0] + bx * k; p.y = b[1] + by * k * b[4] / b[3]; p.z = b[2] + bz * k; v.multiplyScalar(0.7); } } }
+}
+function openZone(id) {
+  const Z = ZONES[id]; G.zones[id] = true; G.spent = (G.spent || 0) + Z.cost; if (id === 'garden') G.orchard = true;
+  Z.draw(Z.name, 'scouted'); Z.wax.uniforms.uOn.value = 0; Z.glow.material.opacity = 0; Z.fadeT = 4;
+  toast(`<b>Your sisters fly ahead to scout ${Z.lname}</b><br><span>${Z.cost} honey left at the stone. ${{ garden: 'The hedge winds settle.', pond: 'Lilies on the pads, but watch for dragonflies.', forest: 'Violets in the roots, foxgloves in the shade, webs between the trunks.' }[id]}</span>`, 7);
+  [0, 2, 4, 7, 9].forEach((n, i) => tone(SCALE[n], 0.1, 2.6, 'sine', i * 0.1));
+  _v.set(Z.x, Z.top + 2, Z.z); puff(_v, 40, [1.0, 0.8, 0.3], 4, 0.014, 2.2, -0.5, 1.2); save();
+}
+function updateZones(dt) {
+  for (const [id, Z] of Object.entries(ZONES)) {
+    const dc = camera.position.distanceTo(Z.label.position);
+    if (Z.fadeT > 0) { Z.fadeT -= dt; Z.label.material.opacity = clamp(Z.fadeT / 2, 0, 1); Z.label.visible = Z.fadeT > 0; continue; }
+    if (G.zones[id]) { Z.label.visible = false; Z.glow.visible = false; Z.wax.uniforms.uOn.value = 0; continue; }
+    const can = stores() >= Z.cost; Z.label.material.opacity = clamp(1.6 - dc / 160, 0, 1); Z.glow.material.opacity = can ? 0.9 : 0.35; Z.wax.uniforms.uOn.value = can ? 1 : 0.25;
+    if (P.mode !== 'fly') continue;
+    const d = Math.hypot(P.pos.x - Z.x, P.pos.z - Z.z), h = P.pos.y - Z.top;
+    if (d < 4.4 && h > -0.2 && h < 3) {
+      if (can) { Z.pay += dt; G.payZ = Z; G.payLast = time; if (Math.random() < dt * 10) tone(SCALE[Math.min(7, Math.floor(Z.pay * 3))], 0.04, 0.4); if (Z.pay >= 1.6) { Z.pay = 0; openZone(id); } }
+      else if (time > (Z.hintT || 0)) { Z.hintT = time + 6; toast(`<b>${Z.name}</b><br><span>needs ${Z.cost} honey in stores. You have ${stores()}</span>`, 4); }
+    } else Z.pay = Math.max(0, Z.pay - dt * 2);
+  }
+}
+// --- dragonflies over the pond: they hover, eye you, then strike. Dart away or keep moving
+function updateDragonflies(dt) {
+  const open = !!G.zones.pond, pb = P.pos;
+  for (const d of dragonflies) {
+    d.g.visible = open && Math.hypot(camera.position.x - POND.x, camera.position.z - POND.z) < 260; if (!open) continue;
+    d.t += dt; d.cd -= dt; const dist = d.p.distanceTo(pb);
+    const near = P.mode === 'fly' && P.stuck <= 0 && Math.hypot(pb.x - POND.x, pb.z - POND.z) < POND.r + 16 && pb.y < WY + 24;
+    let spd = 18, tgt = d.tgt;
+    if (d.state === 'patrol') {
+      if (d.t > d.next) { d.next = d.t + rnd(0.9, 2.4); const a = rnd(TAU), r = rnd(4, POND.r - 8); d.tgt.set(POND.x + Math.cos(a) * r, WY + rnd(2.5, 9), POND.z + Math.sin(a) * r); }
+      if (near && dist < 28 && d.cd <= 0 && !dragonflies.some(o => o !== d && o.state !== 'patrol' && o.state !== 'away')) { d.state = 'eye'; d.t = 0; noiseHit(3000, 6, 0.05, 0.25); }
+    } else if (d.state === 'eye') {
+      spd = 0; d.face.copy(pb).sub(d.p);
+      if (d.t > 0.75) { d.state = 'strike'; d.t = 0; d.tgt.copy(pb); noiseHit(1600, 1.5, 0.12, 0.35, 'bandpass', 4200); }
+      else if (!near || dist > 36) { d.state = 'patrol'; d.t = 0; d.next = 0; }
+    } else if (d.state === 'strike') {
+      d.tgt.lerp(pb, Math.min(1, dt * 2.2)); spd = 36;
+      if (dist < 1.9) {
+        if (G.dartT > 0) { d.state = 'away'; d.t = 0; d.cd = 3; toast('<b>Dodged!</b>', 1.5); }
+        else { tmp.copy(pb).sub(d.p).normalize(); P.vel.addScaledVector(tmp, 15); P.vel.y += 3; const n = losePollen(1); noiseHit(900, 1, 0.3, 0.2, 'lowpass', 200);
+          toast(n ? '<b>A dragonfly struck!</b> it knocked a pollen ball loose' : '<b>A dragonfly struck!</b>', 3); d.state = 'away'; d.t = 0; d.cd = 6;
+          if (!G.seenDragon) { G.seenDragon = true; hint('when a dragonfly hovers and stares, <kbd>Q</kbd> dart or swerve', 6); } }
+        const a = rnd(TAU); d.tgt.set(POND.x + Math.cos(a) * POND.r * 0.6, WY + 8, POND.z + Math.sin(a) * POND.r * 0.6);
+      } else if (d.t > 1.5) { d.state = 'patrol'; d.t = 0; d.next = 0; d.cd = 3; }
+    } else if (d.state === 'away') { spd = 20; if (d.t > 2.5) { d.state = 'patrol'; d.t = 0; d.next = 0; } }
+    tmp.copy(tgt).sub(d.p); const L = tmp.length();
+    if (spd > 0 && L > 0.05) tmp.multiplyScalar(spd * Math.min(1, L / 3) / L); else tmp.set(0, 0, 0);
+    d.v.lerp(tmp, Math.min(1, dt * (spd > 30 ? 4 : 7))); d.p.addScaledVector(d.v, dt); d.p.y = Math.max(d.p.y, WY + 1.2);
+    if (d.state !== 'eye' && d.v.lengthSq() > 1) d.face.lerp(d.v, Math.min(1, dt * 8));
+    d.g.position.copy(d.p); d.g.position.y += Math.sin(time * 3 + d.p.x) * 0.15; orient(_q, d.face, YA); d.g.quaternion.slerp(_q, Math.min(1, dt * 10));
+    d.wings.forEach((w, i) => { w.rotation.z = (i % 2 ? -1 : 1) * Math.sin(time * 70 + (i < 2 ? 0 : 1.6)) * 0.45; });
+    if (dist < 26 && Math.random() < dt * 7) noiseHit(rnd(2600, 3600), 5, 0.025 * (1 - dist / 26), 0.05);
+  }
+}
+// --- the day: the sun sinks from afternoon to dusk. Stock the hive before dark
+var DAY = { t: 0, n: 1, honey: 0, best: 0, streak: 0, ending: 0, LEN: 480, warned: 0, expo: 1,
+  save() { return { t: +this.t.toFixed(4), n: this.n, honey: this.honey, best: this.best, streak: this.streak }; } };
+if (G.daySave) { const d = G.daySave; DAY.t = clamp(+d.t || 0, 0, 0.95); DAY.n = (d.n | 0) || 1; DAY.honey = d.honey | 0; DAY.best = d.best | 0; DAY.streak = d.streak | 0; DAY.warned = DAY.t > 0.9 ? 2 : DAY.t > 0.78 ? 1 : 0; }
+const _sunHi = new V3(3.05, 2.5, 1.8), _sun17 = new V3(2.9, 2.1, 1.3), _sunLo = new V3(2.3, 0.9, 0.3);
+const sunEl = () => 30 - 33 * Math.pow(DAY.t, 1.25);
+function applyDayLight() {
+  const e = sunEl(), el = e * Math.PI / 180;
+  SUN.set(Math.cos(SUN_AZ) * Math.cos(el), Math.sin(el), Math.sin(SUN_AZ) * Math.cos(el));
+  const c = U.uSunC.value; if (e > 17) c.lerpVectors(_sun17, _sunHi, Math.min(1, (e - 17) / 13)); else c.lerpVectors(_sunLo, _sun17, clamp((e - 2) / 15, 0, 1));
+  c.multiplyScalar(smooth(-3, 3, e));
+  const dusk = smooth(9, -3, e); U.uAmb.value = 1 - 0.45 * dusk; U.uHaze.value.set(1 - 0.4 * dusk, 1 - 0.55 * dusk, 1 - 0.25 * dusk);
+  U.uClose.value = smooth(0.86, 0.97, DAY.t); DAY.expo = 1 + 0.5 * dusk;
+}
+const flowersClosed = () => DAY.t > 0.93;
+const dayFade = document.createElement('div'); dayFade.style.cssText = 'position:fixed;inset:0;background:#05040a;opacity:0;pointer-events:none;transition:opacity 1.6s ease;z-index:40;display:flex;align-items:center;justify-content:center;';
+const dayCard = document.createElement('div'); dayCard.style.cssText = 'font:16px Georgia,serif;color:#f4e6c8;text-align:center;line-height:1.7;opacity:0;transition:opacity 1.2s ease;max-width:440px;padding:20px;';
+dayFade.id = 'dayfade'; dayFade.appendChild(dayCard); document.body.appendChild(dayFade);
+function dayCount(v) { DAY.honey += v; return v; }
+function timeOfDay() { const t = DAY.t; return t < 0.35 ? 'afternoon' : t < 0.62 ? 'late afternoon' : t < 0.78 ? 'evening' : t < 0.9 ? 'the sun is low: stock the hive' : 'dusk: flowers closing, head home'; }
+function updateDay(dt) {
+  if (DAY.ending > 0) { dayEnd(dt); return; }
+  if (P.mode === 'fly' || P.mode === 'crawl') DAY.t += dt / DAY.LEN;
+  if (DAY.t > 0.78 && DAY.warned < 1) { DAY.warned = 1; toast('<b>The sun is getting low</b><br><span>stock the hive before dark</span>', 5); tone(SCALE[4], 0.06, 2.5); }
+  if (DAY.t > 0.9 && DAY.warned < 2) { DAY.warned = 2; toast('<b>The flowers are closing</b><br><span>head home: night is coming</span>', 5); tone(SCALE[2], 0.06, 2.5); tone(SCALE[0], 0.05, 2.5, 'sine', 0.3); }
+  if (DAY.t >= 1) DAY.ending = 1e-4;
+  applyDayLight();
+}
+function dayEnd(dt) {
+  const was = DAY.ending; DAY.ending += dt;
+  if (was <= 1e-4) {
+    dayFade.style.opacity = 1; const home = inHive; DAY.lost = home ? 0 : P.load.length;
+    const h = DAY.honey; let title, bonus;
+    if (h >= 40) { title = 'A golden day'; bonus = 15; DAY.streak++; } else if (h >= 22) { title = 'A great day'; bonus = 8; DAY.streak++; } else if (h >= 10) { title = 'A good day'; bonus = 3; DAY.streak = 0; } else { title = 'A quiet day'; bonus = 0; DAY.streak = 0; }
+    if (DAY.streak >= 2) bonus += (DAY.streak - 1) * 2;
+    const best = h > DAY.best; DAY.best = Math.max(DAY.best, h); DAY.bonus = bonus;
+    dayCard.innerHTML = `<div style="font-size:14px;letter-spacing:.2em;text-transform:uppercase;opacity:.6">Night falls on day ${DAY.n}</div><div style="font-size:30px;font-style:italic;margin:6px 0 10px;color:#ffd27a">${title}</div>` +
+      `<div>${h} honey stocked today${best && h > 0 ? ' · your best day yet' : ` · best ${DAY.best}`}</div>` + (bonus ? `<div>The colony is grateful: <b style="color:#ffd27a">+${bonus} honey</b></div>` : '<div style="opacity:.7">Bring home 10 or more for a good day</div>') +
+      (DAY.streak >= 2 ? `<div>${DAY.streak} great days in a row</div>` : '') + (DAY.lost ? `<div style="opacity:.7">${DAY.lost} pollen left outside after dark was lost</div>` : '') + `<div style="opacity:.55;margin-top:12px;font-size:14px">sleeping in the warm hive...</div>`;
+    setTimeout(() => dayCard.style.opacity = 1, 900);
+    P.mode = 'rest';
+  }
+  if (was < 1.7 && DAY.ending >= 1.7) {
+    P.pos.set(0, 12, -5.1); P.vel.set(0, 0, 0); P.load = []; P.pollen = 0; P.stuck = 0; P.yaw = -Math.PI / 2; P.pitch = 0;
+    for (const f of flowers) { f.cool = 0; if (f.rich) f.rich = 0; }
+    if (DAY.bonus) gainHoney(DAY.bonus);
+    DAY.t = 0; DAY.n++; DAY.honey = 0; DAY.warned = 0; applyDayLight(); save();
+  }
+  if (DAY.ending > 1.7) { P.vel.set(0, 0, 0); }
+  if (was < 7.5 && DAY.ending >= 7.5) { dayCard.style.opacity = 0; dayFade.style.opacity = 0; }
+  if (DAY.ending >= 8.5) { DAY.ending = 0; P.mode = 'fly'; toast(`<b>Morning, day ${DAY.n}</b><br><span>the flowers are open and full again</span>`, 5); [0, 4, 7].forEach((n, i) => tone(SCALE[n], 0.08, 2.4, 'sine', i * 0.15)); }
+}
+function updateRound6(dt) { updateDay(dt); updateZones(dt); updateDragonflies(dt); }
+applyDayLight();
+G.orchard = !!G.zones.garden;
+function updateRound5(dt) { updateMob(dt); updateAimShadow(); waspAudio(); updateRound6(dt); }
 // --- valuable flowers make you stay: dwell time grows with value, and the wasps notice
 function dwellSip(f, dt) {
   const need = f.val >= 3 ? 2.0 : 1.0;
@@ -1557,7 +1803,7 @@ function waspAudio() {
     const base = 340 + clamp(closing, -20, 30) * 4 + (angry ? 40 : 0); setG(WA.o1.frequency, base, 0.08); setG(WA.o2.frequency, base * 1.505, 0.08);
     if (WA.p) { _v2.set(1, 0, 0).applyQuaternion(camera.quaternion); setG(WA.p.pan, clamp(_v.dot(_v2), -1, 1) * 0.9, 0.08); } }
 }
-function windHint() { if (camQuiet) return; if (time > G.windHintT) { G.windHintT = time + 7; toast(`<b>The hedge winds are too strong</b><br><span>the orchard opens at 20 honey (you have ${G.honey})</span>`, 4); } }
+function windHint() { if (camQuiet) return; if (time > G.windHintT) { G.windHintT = time + 7; toast(`<b>The hedge winds are too strong</b><br><span>leave 20 honey at the glowing stone by the gate (you have ${stores()} stored)</span>`, 4); } }
 // ---------- sun shadows ----------
 const shadowCam = new THREE.OrthographicCamera(-SHADOW_HALF, SHADOW_HALF, SHADOW_HALF, -SHADOW_HALF, 1, 1600);
 const depthVert = `void main(){ mat4 m=modelMatrix;
@@ -1667,7 +1913,7 @@ function renderFrame() {
   // deep inside the hive the sun can't reach: skip the shadow pass there
   if (!(rad < RIN - 1.5 && camera.position.y > -1 && camera.position.y < HTOP) || !U.uShadowOn.value) renderShadows();
   // exposure: the hive is a cosy cave, outside is bright evening
-  const ex = __post.finalM.uniforms.uExpo; ex.value = lerp(ex.value, inHive ? 1.0 : 0.92, 0.05);
+  const ex = __post.finalM.uniforms.uExpo; ex.value = lerp(ex.value, inHive ? 1.0 : 0.92 * DAY.expo, 0.05);
   __post.render();
 }
 // keep the frame rate smooth on laptops: drop render resolution if frames run long, recover when there's headroom
@@ -1681,4 +1927,4 @@ function adaptRes(ms) {
 }
 
 requestAnimationFrame(frame);
-window.__g = { MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+window.__g = { ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
