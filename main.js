@@ -19,6 +19,7 @@ const DANCE_A = FLOWER_AZ - SUN_AZ; // angle from "up" on the comb
 let _seed = 90210; const srnd = (a = 1, b) => { _seed = (_seed * 16807) % 2147483647; const r = (_seed - 1) / 2147483646; return b === undefined ? r * a : a + r * (b - a); };
 const ORCH = { x: 40, z: -215, r: 80 }, HEDGE_R = 96, HEDGE_GAP_W = 0.095;
 const HEDGE_GAPS = [Math.atan2(-ORCH.z, -ORCH.x), Math.atan2(-ORCH.z, -ORCH.x) + 2.25];
+const HEDGE_TUN = Math.atan2(-ORCH.z, -ORCH.x) - 1.5;
 const inHedgeGap = a => HEDGE_GAPS.some(g => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < HEDGE_GAP_W);
 const HILLS = [{ x: 205, z: -55, r: 75, h: 46 }, { x: -110, z: -175, r: 60, h: 28 }, { x: -235, z: -45, r: 65, h: 34 }, { x: 250, z: 150, r: 70, h: 24 }];
 function terrainH(x, z) {
@@ -76,6 +77,10 @@ const shadowRT = new THREE.WebGLRenderTarget(SHADOW_RES, SHADOW_RES, { depthBuff
 shadowRT.depthTexture = new THREE.DepthTexture(SHADOW_RES, SHADOW_RES); shadowRT.depthTexture.type = THREE.UnsignedIntType;
 shadowRT.depthTexture.compareFunction = THREE.LessEqualCompare; shadowRT.depthTexture.minFilter = shadowRT.depthTexture.magFilter = THREE.LinearFilter;
 const U = { uTime: { value: 0 }, uCam: { value: new V3() }, uSun: { value: SUN }, uGlow: { value: 0 }, uShadow: { value: shadowRT.depthTexture }, uShadowM: { value: new M4() }, uShadowOn: { value: 0 } };
+U.uWind = { value: new V3() };
+const SWAYGLSL = `uniform float uTime; uniform vec3 uWind; attribute float aSway;
+vec2 sway(vec2 p){ float ph=p.x*0.07+p.y*0.05; float s=sin(uTime*1.3+ph)*0.6+sin(uTime*2.9+ph*1.7)*0.25; return uWind.xy*(uWind.z*0.55+s*(0.35+uWind.z*0.4)); }
+`;
 const VERT = `
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;
 void main(){
@@ -580,21 +585,26 @@ const PAL = [
     float k=reveal*clamp(guide*0.75+veins*0.6,0.0,1.0);
     vec3 c=shade(mix(base,base*0.35,k*0.8),n,vW,0.12,1.0)+uvc*k*0.9;
     gl_FragColor=vec4(finish(c,vW),1.0); }`, { side: THREE.DoubleSide });
+  const swayV = (stem, centre) => SWAYGLSL + VERT.replace('vec4 w = m*vec4(position,1.0);', `vec4 w = m*vec4(position,1.0); vec2 o=vec2(m[3][0],m[3][2])${centre ? '' : ''}; w.xz += sway(o)*aSway${stem ? '*position.y*position.y' : ''};`);
+  petalMat.vertexShader = swayV(false);
   const petals = new THREE.InstancedMesh(pg, petalMat, totalP); petals.frustumCulled = false;
   const cen = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 8), mat(`void main(){ vec3 n=NORMAL; float dots=vnoise(vL.xz*22.0); vec3 alb=vC*(0.55+0.8*dots); n=normalize(n+(dots-0.5)*0.6);
-    gl_FragColor=vec4(finish(shade(alb,n,vW,0.1,0.3),vW),1.0); }`), flowers.length); cen.frustumCulled = false;
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.1,0.3),vW),1.0); }`, { vert: swayV(false) }), flowers.length); cen.frustumCulled = false;
   const stemG = new THREE.CylinderGeometry(0.14, 0.22, 1, 6); stemG.translate(0, 0.5, 0);
-  const stems = new THREE.InstancedMesh(stemG, simple('0.12,0.30,0.05', 0.2, 0.4), flowers.length); stems.frustumCulled = false;
+  const stems = new THREE.InstancedMesh(stemG, simple('0.12,0.30,0.05', 0.2, 0.4, { vert: swayV(true) }), flowers.length); stems.frustumCulled = false;
   const m = new M4(), q = new Q4(), e = new THREE.Euler(), col = new THREE.Color(); let pi = 0;
+  const swP = new Float32Array(totalP), swF = new Float32Array(flowers.length);
   flowers.forEach((f, i) => {
+    f.sway = f.giant ? 0.25 : (f.val >= 3 || f.inLog) ? 0 : 1; swF[i] = f.sway;
     const gy = terrainH(f.x, f.z);
     m.compose(new V3(f.x, gy - 0.5, f.z), q.identity(), new V3(f.sw || 1, f.y - gy + 0.3, f.sw || 1)); stems.setMatrixAt(i, m);
     const hq = new Q4().setFromEuler(new THREE.Euler(f.ax, 0, f.az));
     m.compose(new V3(f.x, f.y, f.z), hq, new V3(f.r, f.r * 0.5, f.r)); cen.setMatrixAt(i, m); cen.setColorAt(i, col.setRGB(...f.T.c));
     for (let k = 0; k < f.np; k++) { const a = k / f.np * TAU + i; e.set(0, a, f.tilt + rnd(-0.06, 0.06), 'YXZ'); q.setFromEuler(e).premultiply(hq);
       const off = new V3(f.r * 0.75, -0.1, 0).applyQuaternion(q); const sh = rnd(0.85, 1.1);
-      m.compose(new V3(f.x + off.x, f.y + off.y, f.z + off.z), q, new V3(f.len, f.len, f.len * Math.min(1.1, 7.5 / f.np))); petals.setMatrixAt(pi, m); petals.setColorAt(pi, col.setRGB(f.T.p[0] * sh, f.T.p[1] * sh, f.T.p[2] * sh)); pi++; }
+      m.compose(new V3(f.x + off.x, f.y + off.y, f.z + off.z), q, new V3(f.len, f.len, f.len * Math.min(1.1, 7.5 / f.np))); petals.setMatrixAt(pi, m); petals.setColorAt(pi, col.setRGB(f.T.p[0] * sh, f.T.p[1] * sh, f.T.p[2] * sh)); swP[pi] = f.sway; pi++; }
   });
+  pg.setAttribute('aSway', new THREE.InstancedBufferAttribute(swP, 1)); cen.geometry.setAttribute('aSway', new THREE.InstancedBufferAttribute(swF, 1)); stemG.setAttribute('aSway', new THREE.InstancedBufferAttribute(swF, 1));
   scene.add(petals, cen, stems);
 }
 // mushrooms
@@ -692,9 +702,9 @@ const hedgeMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.25+vW.y*0.
   // hedge ring with two gaps
   const hb = [];
   for (let a = 0; a < TAU; a += 3.4 / HEDGE_R) {
-    if (inHedgeGap(a)) continue;
+    if (inHedgeGap(a)) continue; const tun = Math.abs(Math.atan2(Math.sin(a - HEDGE_TUN), Math.cos(a - HEDGE_TUN))) < 0.07;
     const x = ORCH.x + Math.cos(a) * HEDGE_R, z = ORCH.z + Math.sin(a) * HEDGE_R, gy = terrainH(x, z);
-    for (let k = 0; k < 4; k++) { const s = srnd(5.5, 7.5) * (1 - k * 0.1); hb.push([x + srnd(-2, 2), gy + 3 + k * 8.5 + srnd(-1, 1), z + srnd(-2, 2), s]); }
+    for (let k = 0; k < 4; k++) { const s = srnd(5.5, 7.5) * (1 - k * 0.1); if (tun && k === 0) continue; hb.push([x + srnd(-2, 2), gy + 3 + k * 8.5 + srnd(-1, 1), z + srnd(-2, 2), s]); }
   }
   const hm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), hedgeMat, hb.length);
   hb.forEach((b, i) => { q.setFromEuler(new THREE.Euler(srnd(TAU), srnd(TAU), 0)); m4.compose(new V3(b[0], b[1], b[2]), q, new V3(b[3], b[3] * 0.9, b[3])); hm.setMatrixAt(i, m4); });
@@ -770,14 +780,14 @@ const webs = [];
 // wasps: slimmer, brighter, meaner-looking cousins of the bees
 const waspMat = new THREE.ShaderMaterial({ uniforms: beeMat.uniforms, vertexShader: beeMat.vertexShader, vertexColors: true,
   fragmentShader: beeMat.fragmentShader.replace('vec3(0.60,0.30,0.05)*(0.8+0.4*fz)', 'vec3(1.05,0.78,0.02)*(0.85+0.3*fz)').replace('sin(t*17.0+0.6)', 'sin(t*23.0+0.6)').replace('vec3 alb=vC*(0.8+0.45*fz);', 'vec3 alb=vC*(0.8+0.45*fz)*vec3(0.5,0.45,0.3);') });
-const WASPN = 3;
+const WASPN = 5;
 const waspMesh = new THREE.InstancedMesh(beeGeo, waspMat, WASPN); waspMesh.frustumCulled = false; scene.add(waspMesh);
 const waspWings = new THREE.InstancedMesh(wingGeo, wingMat, WASPN * 2); waspWings.frustumCulled = false; scene.add(waspWings);
 const wasps = [];
 {
   const mh = new V3(FDIR.x * (FIELD_D + 40) - FDIR.z * 35, 0, FDIR.z * (FIELD_D + 40) + FDIR.x * 35); mh.y = terrainH(mh.x, mh.z) + 14;
   wasps.push({ home: mh, R: 38, orchard: false });
-  wasps.push({ home: NEST.clone(), R: 30, orchard: true }, { home: NEST.clone(), R: 45, orchard: true });
+  wasps.push({ home: NEST.clone(), R: 30, orchard: true }, { home: NEST.clone(), R: 45, orchard: true }, { home: new V3(0, -500, 0), R: 0, raider: true }, { home: new V3(0, -500, 0), R: 0, raider: true });
   for (const w of wasps) { w.p = w.home.clone(); w.v = new V3(); w.state = 'patrol'; w.t = 0; w.ph = srnd(TAU); w.q = new Q4(); w.fwd = new V3(1, 0, 0); w.buzzT = 0; }
 }
 // golden glow columns over flowers that are overflowing with nectar
@@ -788,6 +798,47 @@ const richGlows = [];
   x.globalCompositeOperation = 'destination-in'; g = x.createLinearGradient(0, 0, 0, 256); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.75, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,1)'); x.fillStyle = g; x.fillRect(0, 0, 64, 256);
   const tex = new THREE.CanvasTexture(c);
   for (let i = 0; i < 3; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(2.2, 1.6, 0.7), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 })); s.scale.set(5, 46, 1); s.center.set(0.5, 0); s.visible = false; scene.add(s); richGlows.push({ s, f: null }); }
+}
+
+// ================= ROUND 3: air to ride, natural lines =================
+// sun-warmed stones: rising air you can ride
+const STONES = [];
+{
+  const H = HILLS[0], toHive = Math.atan2(-H.z, -H.x);
+  const spots = [[H.x + Math.cos(toHive) * (H.r + 6), H.z + Math.sin(toHive) * (H.r + 6)],
+    [ORCH.x + Math.cos(HEDGE_GAPS[0]) * (HEDGE_R + 30), ORCH.z + Math.sin(HEDGE_GAPS[0]) * (HEDGE_R + 30)],
+    [FDIR.x * 120 - FDIR.z * 50, FDIR.z * 120 + FDIR.x * 50], [FDIR.x * 200 + FDIR.z * 45, FDIR.z * 200 - FDIR.x * 45], [-70, -60]];
+  const warmM = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.5+vW.y*0.4); vec3 alb=mix(vec3(0.42,0.34,0.27),vec3(0.78,0.66,0.52),a);
+    alb=mix(alb,vec3(0.55,0.48,0.20),smoothstep(0.6,0.8,fbm(vW.xz*1.7))*0.5);
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.15,0.0)+vec3(0.10,0.04,0.0)*smoothstep(0.3,1.0,n.y),vW),1.0); }`);
+  for (const [x, z] of spots) {
+    const gy = terrainH(x, z), g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const k = 0.85 + 0.3 * Math.sin(p.getX(i) * 3 + p.getZ(i) * 2); p.setXYZ(i, p.getX(i) * k, Math.max(p.getY(i), -0.3) * k, p.getZ(i) * k); } g.computeVertexNormals();
+    const m = new THREE.Mesh(g, warmM); m.scale.set(8, 3.2, 7); m.rotation.y = srnd(TAU); m.position.set(x, gy + 0.6, z); scene.add(m);
+    STONES.push({ x, z, y: gy + 3.5, r: 9 });
+  }
+}
+// arching stems with hanging dewdrops: a natural line from the meadow toward the tall hill
+const ARCHES = [];
+const dewMat = mat(`void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW); float fr=pow(1.0-max(dot(n,V),0.0),2.5);
+  vec3 R=reflect(-V,n); vec3 c=hazeCol(R)*0.7*fr+vec3(0.15,0.25,0.22)*(1.0-fr)+vec3(6.0,4.6,3.0)*pow(max(dot(R,uSun),0.0),60.0);
+  c+=vec3(0.5,0.9,0.7)*pow(max(dot(-V,uSun),0.0),4.0)*0.6;
+  gl_FragColor=vec4(finish(c,vW),1.0); }`);
+{
+  const H = HILLS[0], A = new V3(FDIR.x * 135, 0, FDIR.z * 135), B = new V3(H.x + Math.cos(Math.atan2(-H.z, -H.x) + 0.5) * (H.r + 12), 0, H.z + Math.sin(Math.atan2(-H.z, -H.x) + 0.5) * (H.r + 12));
+  const N = 7, stemM = simple('0.16,0.34,0.07', 0.25, 0.7), bellM = simple('0.42,0.30,0.85', 0.2, 1.0, { side: THREE.DoubleSide });
+  for (let i = 0; i < N; i++) {
+    const t = (i + 0.5) / N, px = lerp(A.x, B.x, t), pz = lerp(A.z, B.z, t), dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz);
+    const sideX = -dz / L, sideZ = dx / L, wob = Math.sin(t * 7.0) * 14; const cx = px + sideX * wob, cz = pz + sideZ * wob;
+    const w = srnd(4.5, 6), h = srnd(10, 14), gy = terrainH(cx, cz), pts = [];
+    for (let k = 0; k <= 12; k++) { const a = Math.PI * k / 12; pts.push(new V3(cx + sideX * Math.cos(a) * w, gy - 0.5 + Math.sin(a) * h + Math.sin(a * 2) * 0.6, cz + sideZ * Math.cos(a) * w)); }
+    const curve = new THREE.CatmullRomCurve3(pts); scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.32, 6), stemM));
+    const top = new V3(cx, gy - 0.5 + h, cz);
+    const bell = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.6, 10, 1, true), bellM); bell.position.set(cx, top.y - 1.1, cz); scene.add(bell);
+    const drop = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), dewMat); drop.scale.set(1, 1.25, 1); drop.position.set(cx, top.y - 2.5, cz); scene.add(drop);
+    const samples = []; for (let k = 0; k <= 24; k++) samples.push(curve.getPoint(k / 24));
+    ARCHES.push({ samples, drop, home: drop.position.clone(), cool: 0, cx, cz, gy, w, h });
+  }
 }
 
 // ---------- first-person body ----------
@@ -899,13 +950,15 @@ function collide(p, v) {
   }
   { const dx = p.x - ORCH.x, dz = p.z - ORCH.z, dO = Math.hypot(dx, dz);
     if (!G.orchard) { const lim = HEDGE_R + 6; if (dO < lim) { const k = lim / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; const vr = (v.x * dx + v.z * dz) / dO; if (vr < 0) { v.x -= vr * dx / dO * 1.6; v.z -= vr * dz / dO * 1.6; } windHint(); } }
-    else if (Math.abs(dO - HEDGE_R) < 8.5 + PR && p.y < terrainH(p.x, p.z) + 37 && !inHedgeGap(Math.atan2(dz, dx))) { const t = HEDGE_R + (dO > HEDGE_R ? 1 : -1) * (8.5 + PR), k = t / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; } }
+    else if (Math.abs(dO - HEDGE_R) < 8.5 + PR && p.y < terrainH(p.x, p.z) + 37 && !inHedgeGap(Math.atan2(dz, dx)) && !(Math.abs(Math.atan2(Math.sin(Math.atan2(dz, dx) - HEDGE_TUN), Math.cos(Math.atan2(dz, dx) - HEDGE_TUN))) < 0.06 && p.y < terrainH(p.x, p.z) + 5.5)) { const t = HEDGE_R + (dO > HEDGE_R ? 1 : -1) * (8.5 + PR), k = t / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; } }
   for (const t of orchTrees) { const dx = p.x - t.x, dz = p.z - t.z, dh = Math.hypot(dx, dz); if (dh > t.cr * 1.6 + 3) continue;
     if (p.y < t.top - t.cr * 0.3 && dh < t.R + PR + 0.8) { const k = (t.R + PR + 0.8) / Math.max(dh, 0.01); p.x = t.x + dx * k; p.z = t.z + dz * k; }
     if (t.blobs) for (const b of t.blobs) { const bx = p.x - b[0], by = (p.y - b[1]) * b[3] / b[4], bz = p.z - b[2], dd = Math.hypot(bx, by, bz), rr = b[3] * 1.02 + PR; if (dd < rr) { const k = rr / Math.max(dd, 0.01); p.x = b[0] + bx * k; p.y = b[1] + by * k * b[4] / b[3]; p.z = b[2] + bz * k; v.multiplyScalar(0.7); } } }
   { const A = LOG.axis, dx = p.x - LOG.c.x, dy = p.y - LOG.c.y, dz = p.z - LOG.c.z, u = dx * A.x + dy * A.y + dz * A.z;
     if (Math.abs(u) < LOG.len / 2 + PR) { const px = dx - A.x * u, py = dy - A.y * u, pz = dz - A.z * u, r = Math.hypot(px, py, pz);
       if (r < LOG.ro + PR && r > LOG.ri - PR) { const t = r < (LOG.ri + LOG.ro) / 2 ? LOG.ri - PR : LOG.ro + PR, k = t / Math.max(r, 0.01); p.x = LOG.c.x + A.x * u + px * k; p.y = LOG.c.y + A.y * u + py * k; p.z = LOG.c.z + A.z * u + pz * k; } } }
+  archCollide(p);
+  for (const s of STONES) { const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz); if (d < 8 && p.y < s.y + 0.4 + PR) { if (d > 6.5) { const k = 8 / Math.max(d, 0.01); p.x = s.x + dx * k; p.z = s.z + dz * k; } else { p.y = s.y + 0.4 + PR; v.y = Math.max(v.y, 0); } } }
   const tr = trunkR(p.y) + PR; if (rad < tr && p.y < 92) { const k = tr / Math.max(rad, 0.01); p.x *= k; p.z *= k; }
   const gy = terrainH(p.x, p.z) + PR; if (p.y < gy) { p.y = gy; v.y = Math.max(v.y, 0); }
 }
@@ -953,17 +1006,22 @@ function update(dt) {
     P.wingT += dt; if (!P.wingsReady && P.wingT > (P.lives > 1 ? 3 : 7)) { P.wingsReady = true; sweep(90, 200, 0.7, 0.06, 'sawtooth'); hint('<kbd>space</kbd>', 30); }
     if (P.wingsReady && touchFwd && P.wingT > 9) takeOff();
   } else if (P.mode === 'fly') {
-    const maxS = lerp(5.5, 30 * G.speed, outF) * (1 - 0.075 * G.weight * P.pollen), damp = 2.4;
+    const maxS = lerp(5.5, 30 * G.speed * (1 + 0.4 * Math.min(1, G.boost)), outF) * (1 - 0.075 * G.weight * P.pollen), damp = lerp(2.4, 1.6, outF);
     acc.set(0, 0, 0).addScaledVector(fwd, kf).addScaledVector(right, ks * 0.8); acc.y += ku * 0.8; thrust = Math.min(1, acc.length());
     acc.multiplyScalar(maxS * damp); if (ku > 0) acc.y *= 1 - P.wet * 0.6;
     acc.y -= P.wet * 9 + P.pollen * 0.6 * G.weight * outF;
+    airForces(acc, dt);
     if (P.pollen > 0) { acc.x += Math.sin(time * 2.3) * P.pollen * 0.5; acc.y += Math.sin(time * 3.1) * P.pollen * 0.45; }
     if (!inHive) { const r = Math.hypot(P.pos.x, P.pos.z); if (r > 330) { acc.x -= P.pos.x / r * (r - 330) * 0.6; acc.z -= P.pos.z / r * (r - 330) * 0.6; } if (P.pos.y > 62) acc.y -= (P.pos.y - 62) * 1.5; }
-    P.vel.addScaledVector(acc, dt); P.vel.multiplyScalar(Math.max(0, 1 - damp * dt)); P.pos.addScaledVector(P.vel, dt);
+    P.vel.addScaledVector(acc, dt); P.vel.multiplyScalar(Math.max(0, 1 - damp * dt));
+    if (!inHive) { const hv = Math.hypot(P.vel.x, P.vel.z), fl = Math.hypot(fwd.x, fwd.z); if (hv > 4 && kf > 0 && fl > 0.2) { const k = Math.min(1, dt * 1.6 * outF); P.vel.x += (fwd.x / fl * hv - P.vel.x) * k; P.vel.z += (fwd.z / fl * hv - P.vel.z) * k; }
+      if (!ku) P.vel.y *= 1 - Math.min(1, dt * 1.2 * outF); }
+    P.pos.addScaledVector(P.vel, dt);
     collide(P.pos, P.vel);
     P.landed = null;
     if (!inHive) {
-      for (const f of flowers) { const d = Math.hypot(P.pos.x - f.x, P.pos.z - f.z); if (flowerHit(f, d, dt)) {
+      for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (flowerHit(f, d, dt)) {
+        if (f.rich > 0 && !(f.orch && !G.orchard)) richSip(f, dt); else
         if (f.cool <= 0 && P.pollen < G.cap && !(f.orch && !G.orchard)) { f.cool = f.val >= 3 ? 70 : 25; addPollen(f); tone(SCALE[P.pollen - 1], 0.13, 2.2); _v.set(f.x, f.y + 0.6, f.z); puff(_v, 26, [1.0, 0.82, 0.25], 2.2, 0.012, 1.8, 0.6, 0.8); } } if (f.cool > 0) f.cool -= dt; }
       for (const s of shrooms) { tmp.set(P.pos.x - s.x, (P.pos.y - s.y) / 0.7, P.pos.z - s.z); const d = tmp.length(); if (d < s.R + 0.45 && tmp.y > -0.2) { tmp.normalize(); P.pos.set(s.x + tmp.x * (s.R + 0.45), s.y + tmp.y * (s.R + 0.45) * 0.7, s.z + tmp.z * (s.R + 0.45)); P.vel.addScaledVector(tmp, 17); P.vel.y += 6; s.sq = 1; sweep(170, 420, 0.25, 0.12); sweep(420, 260, 0.5, 0.06); } s.sq = Math.max(0, s.sq - dt * 2.5); const k = 1 - Math.sin(s.sq * Math.PI) * 0.25 * s.sq; s.mesh.scale.set(s.R * (2 - k), s.R * 0.7 * k, s.R * (2 - k)); }
       // water
@@ -1010,9 +1068,9 @@ function update(dt) {
   if (P.mode === 'crawl') camPos.y += Math.sin(bob) * 0.012; else if (P.mode === 'fly') camPos.y += Math.sin(bob) * 0.035;
   P.yawRate *= Math.max(0, 1 - dt * 6);
   const sv = P.vel.dot(right);
-  const targetRoll = P.mode === 'fly' ? clamp(P.yawRate * 2.2 - sv * 0.018, -0.5, 0.5) + Math.sin(time * 2.6) * 0.02 * P.pollen : 0;
+  const targetRoll = P.mode === 'fly' ? clamp(P.yawRate * 2.8 - sv * 0.03, -0.6, 0.6) + Math.sin(time * 2.6) * 0.02 * P.pollen : 0;
   P.roll = lerp(P.roll, targetRoll, Math.min(1, dt * 5));
-  camera.position.copy(camPos); camera.rotation.set(P.pitch, P.yaw, P.roll);
+  camera.position.copy(camPos); camera.rotation.set(P.pitch, P.yaw, P.roll); camera.updateMatrixWorld(); thirdPerson(dt);
   const spd = P.vel.length(); fov = lerp(fov, 74 + Math.min(16, spd * 0.55), Math.min(1, dt * 3)); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   U.uCam.value.copy(camPos); sky.position.copy(camPos);
   ants.forEach((a, i) => { const s = i ? -1 : 1; a.rotation.x = Math.sin(time * 1.7 + i) * 0.05 + clamp(spd * 0.012, 0, 0.3) + (P.mode === 'cell' ? Math.sin(time * 6 + i * 2) * 0.05 : 0); a.rotation.y = s * (Math.sin(time * 1.3 + i * 2) * 0.06) + P.yawRate * 3; });
@@ -1029,7 +1087,7 @@ function update(dt) {
   beacon.material.opacity = lerp(beacon.material.opacity, inHive ? 0 : 0.12 + P.pollen * 0.1, Math.min(1, dt));
   fish.userData.tail.rotation.y = Math.sin(time * (P.mode === 'gulp' ? 9 : 3)) * 0.45;
 
-  updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateWorld(dt); updateParts(dt); updateHud(dt);
+  updateWind(dt); updateAirLife(dt); updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateWorld(dt); updateParts(dt); updateHud(dt);
 
   // overlays
   ui.water.style.opacity = camPos.y < WY && !inHive ? 0.62 : 0; ui.drops.style.opacity = P.wet * 0.9; ui.black.style.opacity = black;
@@ -1043,7 +1101,7 @@ function update(dt) {
     setG(A.humG.gain, P.mode === 'gulp' ? 0.02 : hg, 0.25); if (A.pan.pan) setG(A.pan.pan, inHive ? 0 : clamp(side, -0.9, 0.9), 0.2);
     A.rich.forEach((r, i) => setG(r.g.gain, r.v * clamp(combUniforms.uHoney.value * 6 - i * 0.6 + pulse, 0, 1), 0.6));
     const flying = P.mode === 'fly'; setG(A.buzzG.gain, flying ? 0.012 + thrust * 0.03 + Math.min(0.02, spd * 0.001) : 0, 0.12); setG(A.buzz.frequency, 185 + spd * 2.5 + thrust * 18 - P.pollen * 4 - P.wet * 25, 0.1); setG(A.buzz2.frequency, 2 * (185 + spd * 2.5 + thrust * 18 - P.pollen * 4), 0.1);
-    setG(A.windG.gain, outF * (0.035 + Math.min(0.06, spd * 0.003)) * (P.mode === 'gulp' ? 0.2 : 1), 0.4);
+    setG(A.windG.gain, outF * (0.035 + Math.min(0.06, spd * 0.003) + 0.05 * WIND.s) * (P.mode === 'gulp' ? 0.2 : 1), 0.4);
     birdT -= dt; if (birdT < 0 && outF > 0.5 && P.mode === 'fly') { birdT = rnd(3, 9); const b = rnd(2200, 3600), n = 2 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) setTimeout(() => sweep(b * rnd(0.9, 1.1), b * rnd(1.15, 1.5), 0.09, 0.018), i * rnd(110, 160)); }
   }
 }
@@ -1059,6 +1117,7 @@ const UNLOCKS = [
 P.load = [];
 try { const s = JSON.parse(localStorage.getItem('honeylight.save2') || 'null'); if (s) { G.honey = s.honey | 0; G.workers = s.workers | 0; } else G.honey = Math.round((P.honey || 0) * 20); } catch (e) { }
 function save() { try { localStorage.setItem('honeylight.save2', JSON.stringify({ honey: G.honey, workers: G.workers })); } catch (e) { } }
+addEventListener('pagehide', save); setInterval(() => { if (P.mode === 'fly' || P.mode === 'crawl') save(); }, 15000);
 function applyUnlocks(announce) { for (const u of UNLOCKS) if (G.honey >= u.at && !u.done) { u.done = true; u.apply(); if (announce) { toast(`<b>${u.name}</b><br><span>${u.desc}</span>`, 6); [0, 2, 4, 7].forEach((n, i) => tone(SCALE[n], 0.1, 2.6, 'sine', i * 0.12)); } } }
 for (let i = 0; i < G.workers; i++) makeForager();
 applyUnlocks(false);
@@ -1084,9 +1143,9 @@ function updateHud(dt) {
   const show = P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge';
   hud.style.opacity = show ? 1 : 0;
   let pips = ''; for (let i = 0; i < G.cap; i++) pips += i < P.load.length ? `<i class="on${P.load[i] > 1 ? ' gold' : ''}"></i>` : '<i></i>';
-  const nu = nextUnlock(), chasing = wasps.some(w => w.state === 'chase');
+  const nu = nextUnlock(), chasing = wasps.some(w => w.state === 'chase'), coming = !chasing && wasps.some(w => w.state === 'approach' && w.t > 0 && w.p.distanceTo(P.pos) < 70);
   const html = `<div class="row"><span class="jar"></span><b>${G.honey}</b> honey <span class="dim">· ${G.workers} sister${G.workers === 1 ? '' : 's'}</span></div><div class="row pips">${pips}</div>` +
-    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '');
+    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : coming ? '<div class="row warn">wasps are coming...</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '');
   if (html !== hudCache) { hud.innerHTML = html; hudCache = html; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) toastEl.style.opacity = 0; }
 }
@@ -1094,7 +1153,7 @@ function updateHud(dt) {
 function updateRich(dt) {
   G.richT -= dt;
   for (const g of richGlows) {
-    if (g.f && !(g.f.rich > 0)) { g.f = null; }
+    if (g.f && !(g.f.rich > 0)) { g.f.raid = false; g.f.cool = 20; g.f = null; }
     if (!g.f) { g.s.material.opacity = Math.max(0, g.s.material.opacity - dt); if (g.s.material.opacity <= 0) g.s.visible = false; continue; }
     g.f.rich -= dt; const wilt = clamp(g.f.rich / 8, 0, 1);
     g.s.visible = true; g.s.material.opacity = (0.55 + 0.25 * Math.sin(time * 3)) * wilt; g.s.position.set(g.f.x, g.f.y - 0.5, g.f.z);
@@ -1113,7 +1172,11 @@ function updateWasps(dt) {
     w.t += dt; w.buzzT -= dt;
     const d = w.p.distanceTo(P.pos), active = !w.orchard || G.orchard;
     let target, spd;
-    if (w.state === 'patrol') {
+    if (w.raider) { const rr = raiderUpdate(w, d, flying, dt);
+      if (rr === null) { w.p.set(0, -500, 0); _v2.set(0.001, 0.001, 0.001); _wm2.compose(w.p, w.q, _v2); waspMesh.setMatrixAt(i, _wm2); waspWings.setMatrixAt(i * 2, _wm2); waspWings.setMatrixAt(i * 2 + 1, _wm2); return; }
+      if (rr) { target = rr[0]; spd = rr[1]; } }
+    if (target) { }
+    else if (w.state === 'patrol') {
       const a = time * 0.35 + w.ph; target = _wv.set(w.home.x + Math.cos(a) * w.R, w.home.y + Math.sin(time * 0.9 + w.ph) * 4, w.home.z + Math.sin(a * 1.3) * w.R); spd = 9;
       if (active && flying && P.load.length > 0 && d < 34) { w.state = 'chase'; w.t = 0; sweep(300, 520, 0.35, 0.05, 'sawtooth'); if (!G.seenWasp) { G.seenWasp = true; toast('<b>A wasp wants your pollen!</b><br><span>heavy bees are slow: outrun it, or dive into the hive</span>', 6); } }
     } else if (w.state === 'chase') {
@@ -1124,12 +1187,13 @@ function updateWasps(dt) {
         noiseHit(700, 1.5, 0.25, 0.25); sweep(500, 180, 0.4, 0.06, 'sawtooth'); toast(n ? `<b>Stung!</b> the wasp stole ${n} pollen` : '<b>Stung!</b>', 3);
         w.state = 'retreat'; w.t = 0;
       } else if (w.t > 11 || d > 75 || !flying || P.load.length === 0) { w.state = 'retreat'; w.t = 0; }
+      if (w.raider) spd = 21;
       if (w.buzzT <= 0 && d < 30) { w.buzzT = 0.28; sweep(rnd(230, 260), rnd(280, 320), 0.22, 0.035 * (1 - d / 30) + 0.01, 'sawtooth'); }
-    } else { target = w.home; spd = 14; if (w.t > 7) { w.state = 'patrol'; w.t = 0; } }
+    } else if (w.state === 'retreat') { target = w.home; spd = 14; if (w.t > 7) { w.state = 'patrol'; w.t = 0; } }
     tmp.copy(target).sub(w.p); const L = tmp.length(); if (L > 0.01) tmp.multiplyScalar(Math.min(spd, L * 2) / L);
     w.v.lerp(tmp, Math.min(1, dt * (w.state === 'chase' ? 2.6 : 1.5)));
     w.p.addScaledVector(w.v, dt); w.p.y += Math.sin(time * 7 + w.ph) * 0.02;
-    const gy = terrainH(w.p.x, w.p.z) + 2; if (w.p.y < gy) w.p.y = gy;
+    const gy = terrainH(w.p.x, w.p.z) + 2; if (w.p.y < gy) w.p.y = gy; if (spd === 0) w.v.set(0, 0, 0);
     if (w.v.lengthSq() > 0.5) w.fwd.lerp(_v.copy(w.v).normalize(), Math.min(1, dt * 6));
     orient(w.q, w.fwd, YA); _v2.set(1.8, 1.6, 2.4);
     _wm2.compose(w.p, w.q, _v2); waspMesh.setMatrixAt(i, _wm2);
@@ -1179,17 +1243,111 @@ function bloomH(f, d) {
 }
 function flowerHit(f, d, dt) {
   const p = P.pos, v = P.vel, big = f.giant ? 1.5 : 0, Rh = f.r * 0.75 + f.len * 0.85, bot = f.y - 1.4 - big, sr = 0.25 * (f.sw || 1) + PR;
-  if (p.y < bot) { if (d < sr) { const k = sr / Math.max(d, 0.01); p.x = f.x + (p.x - f.x) * k; p.z = f.z + (p.z - f.z) * k; } return false; }
+  const fx = f.sx, fz = f.sz;
+  if (p.y < bot) { if (d < sr) { const k = sr / Math.max(d, 0.01); p.x = fx + (p.x - fx) * k; p.z = fz + (p.z - fz) * k; } return false; }
   if (d > Rh + PR) return false;
   const top = f.y + bloomH(f, Math.min(d, Rh)) + PR + 0.15;
   if (p.y > top + 0.001) return false;
   const pt = top - p.y, pb = p.y - bot, ps = Rh + PR - d;
-  if (pt <= pb && pt <= 1.6 + big + ps) { p.y = top; v.y = Math.max(v.y, 0); v.x *= 1 - Math.min(1, dt * 5); v.z *= 1 - Math.min(1, dt * 5); P.landed = f; return d < Rh * 0.85; } // only the top of the bloom gives pollen
+  if (pt <= pb && pt <= 1.6 + big + ps) { p.y = top; v.y = Math.max(v.y, 0); v.x *= 1 - Math.min(1, dt * 5); v.z *= 1 - Math.min(1, dt * 5); P.landed = f; p.x += f.dsx; p.z += f.dsz; return d < Rh * 0.85; } // only the top of the bloom gives pollen
   else if (pb <= ps) { p.y = bot; v.y = Math.min(v.y, 0); }
-  else { const k = (Rh + PR) / Math.max(d, 0.01); p.x = f.x + (p.x - f.x) * k; p.z = f.z + (p.z - f.z) * k; const nx = (p.x - f.x) / (Rh + PR), nz = (p.z - f.z) / (Rh + PR), vn = v.x * nx + v.z * nz; if (vn < 0) { v.x -= vn * nx * 1.3; v.z -= vn * nz * 1.3; } }
+  else { const k = (Rh + PR) / Math.max(d, 0.01); p.x = fx + (p.x - fx) * k; p.z = fz + (p.z - fz) * k; const nx = (p.x - fx) / (Rh + PR), nz = (p.z - fz) / (Rh + PR), vn = v.x * nx + v.z * nz; if (vn < 0) { v.x -= vn * nx * 1.3; v.z -= vn * nz * 1.3; } }
   return false;
 }
-function windHint() { if (time > G.windHintT) { G.windHintT = time + 7; toast(`<b>The hedge winds are too strong</b><br><span>the orchard opens at 20 honey (you have ${G.honey})</span>`, 4); } }
+// ---------- wind, updrafts, swaying flowers, dewdrops ----------
+const WIND = { dx: 1, dz: 0, s: 0.3 }, SWAY_AMP = 2.0;
+flowers.forEach(f => { f.sx = f.x; f.sz = f.z; f.dsx = 0; f.dsz = 0; });
+G.boost = 0; G.chain = 0; G.chainT = 0; G.seenLift = false; G.seenDew = false;
+function updateWind(dt) {
+  const a = 0.6 + Math.sin(time * 0.021) * 0.9; WIND.dx = Math.cos(a); WIND.dz = Math.sin(a);
+  WIND.s = 0.15 + 0.85 * smooth(0.35, 1, 0.5 + 0.5 * Math.sin(time * 0.16 + Math.sin(time * 0.047) * 3));
+  U.uWind.value.set(WIND.dx * SWAY_AMP, WIND.dz * SWAY_AMP, WIND.s);
+  for (const f of flowers) { if (!f.sway) continue; const ph = f.x * 0.07 + f.z * 0.05, s = Math.sin(time * 1.3 + ph) * 0.6 + Math.sin(time * 2.9 + ph * 1.7) * 0.25, k = (WIND.s * 0.55 + s * (0.35 + WIND.s * 0.4)) * f.sway;
+    const nx = f.x + WIND.dx * SWAY_AMP * k, nz = f.z + WIND.dz * SWAY_AMP * k; f.dsx = nx - f.sx; f.dsz = nz - f.sz; f.sx = nx; f.sz = nz; }
+}
+// called from the flight code: returns extra acceleration from wind, rising air and dew rush
+function airForces(acc, dt) {
+  if (inHive) return;
+  const gy = terrainH(P.pos.x, P.pos.z), alt = P.pos.y - gy, dO = Math.hypot(P.pos.x - ORCH.x, P.pos.z - ORCH.z);
+  const shelter = P.landed ? 0 : smooth(2, 12, alt) * (dO < HEDGE_R ? 0.35 : 1);
+  acc.x += WIND.dx * WIND.s * 10 * shelter; acc.z += WIND.dz * WIND.s * 10 * shelter;
+  for (const s of STONES) { const d = Math.hypot(P.pos.x - s.x, P.pos.z - s.z), h = P.pos.y - s.y; if (d < s.r + 4 && h > -4 && h < 80) { acc.y += 30 * (1 - h / 80) * smooth(s.r + 4, s.r * 0.4, d); if (!G.seenLift && h > 2) { G.seenLift = true; toast('<b>Warm air rises off the sun-baked stone</b><br><span>let it carry you up</span>', 5); } } }
+  // gust flecks drifting past
+  if (WIND.s > 0.45 && Math.random() < dt * 40 * WIND.s * shelter) { const q = parts[pNext]; _v.set(P.pos.x + rnd(-14, 14), P.pos.y + rnd(-5, 6), P.pos.z + rnd(-14, 14)); puff(_v, 1, [0.9, 0.88, 0.78], 0, 0.006, 1.4); q.v.set(WIND.dx * 26 * WIND.s, rnd(-1, 1), WIND.dz * 26 * WIND.s); }
+}
+function updateAirLife(dt) {
+  G.boost = Math.max(0, G.boost - dt); G.chainT -= dt; if (G.chainT <= 0) G.chain = 0;
+  const near = P.mode === 'fly' && !inHive;
+  for (const s of STONES) { const d = Math.hypot(camera.position.x - s.x, camera.position.z - s.z); if (d < 160 && Math.random() < dt * 12) { const q = parts[pNext]; _v.set(s.x + rnd(-6, 6), s.y + rnd(0, 3), s.z + rnd(-6, 6)); puff(_v, 1, [1.0, 0.85, 0.55], 0, 0.009, 3.5); q.v.set(rnd(-0.5, 0.5), rnd(5, 9), rnd(-0.5, 0.5)); } }
+  for (const a of ARCHES) {
+    if (a.cool > 0) { a.cool -= dt; a.drop.scale.setScalar(Math.min(1, Math.max(0.01, 1 - a.cool / 1.5 + 1 - 1)) ); if (a.cool <= 0) { a.drop.visible = true; a.drop.scale.set(1, 1.25, 1); } continue; }
+    a.drop.position.set(a.home.x + Math.sin(time * 1.7 + a.cx) * 0.12, a.home.y + Math.sin(time * 2.3 + a.cz) * 0.06, a.home.z);
+    if (near && P.pos.distanceTo(a.drop.position) < 1.9) {
+      a.cool = 14; a.drop.visible = false; G.boost = 2.6; G.chain = G.chainT > 0 ? G.chain + 1 : 1; G.chainT = 4;
+      tone(SCALE[Math.min(7, 2 + G.chain)], 0.11, 1.6); tone(SCALE[Math.min(7, 2 + G.chain)] * 2, 0.04, 1.2, 'sine', 0.05); puff(a.drop.position, 18, [0.75, 1.0, 0.9], 2.5, 0.01, 1.0);
+      if (!G.seenDew) { G.seenDew = true; toast('<b>A sip of morning dew</b><br><span>a rush of energy. There are more under the arching stems</span>', 5); }
+    }
+  }
+  // blossoms drifting down from the orchard canopies
+  if (G.orchard && Math.hypot(camera.position.x - ORCH.x, camera.position.z - ORCH.z) < ORCH.r + 80 && Math.random() < dt * 30) {
+    const t = orchTrees[(Math.random() * orchTrees.length) | 0], q = parts[pNext]; _v.set(t.x + rnd(-t.cr, t.cr), t.top + rnd(-2, 4), t.z + rnd(-t.cr, t.cr));
+    puff(_v, 1, Math.random() < 0.6 ? [1.0, 0.62, 0.75] : [1.0, 0.92, 0.9], 0, 0.011, 6); q.g = 0; q.v.set(WIND.dx * 6 * WIND.s + rnd(-1, 1), -rnd(1.5, 3), WIND.dz * 6 * WIND.s + rnd(-1, 1));
+  }
+}
+function archCollide(p) {
+  for (const a of ARCHES) { if (Math.abs(p.x - a.cx) > a.w + 3 || Math.abs(p.z - a.cz) > a.w + 3) continue;
+    for (const s of a.samples) { const dx = p.x - s.x, dy = p.y - s.y, dz = p.z - s.z, d = Math.hypot(dx, dy, dz), r = 0.32 + PR; if (d < r) { const k = r / Math.max(d, 0.01); p.x = s.x + dx * k; p.y = s.y + dy * k; p.z = s.z + dz * k; } } }
+}
+// ---------- third-person view (V) ----------
+try { G.third = localStorage.getItem('honeylight.view') === '3'; } catch (e) { G.third = false; }
+const me = newBee(1); me.s.set(0.001, 0.001, 0.001);
+const _yflip = new Q4().setFromAxisAngle(YA, Math.PI);
+me.update = () => { const on = G.third && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.copy(camera.quaternion).multiply(_yflip); me.fly = P.mode === 'fly'; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
+addEventListener('keydown', e => { if (e.code === 'KeyV' && !e.repeat) { G.third = !G.third; try { localStorage.setItem('honeylight.view', G.third ? '3' : '1'); } catch (er) { } hint(G.third ? 'view from behind &nbsp; <kbd>V</kbd> to switch back' : 'bee\'s-eye view', 2.5); } });
+const _cp = new V3(), _cb = new V3(), _cd = new V3(), _cz = new V3();
+let camQuiet = false, camDist = 0;
+function camBlocked(pt) { _cz.copy(pt); camQuiet = true; collide(_cz, _cd.set(0, 0, 0)); camQuiet = false; if (_cz.distanceToSquared(pt) > 0.0025) return true;
+  for (const f of flowers) { const d = Math.hypot(pt.x - f.sx, pt.z - f.sz); if (d < f.r * 0.75 + f.len * 0.85 + 0.2 && pt.y < f.y + bloomH(f, d) + 0.25 && pt.y > f.y - 1.6) return true; } return false; }
+function thirdPerson(dt) {
+  if (!G.third || P.mode === 'title' || P.mode === 'cell' || P.mode === 'emerge' || P.mode === 'gulp') { camDist = 0; return; }
+  const want = inHive ? 1.7 : 3.4, up = inHive ? 0.45 : 0.9;
+  _cb.set(0, up, want).applyQuaternion(camera.quaternion); // behind and a little above, in view space
+  // pull in if something solid is between the bee and the camera
+  let ok = 0; const N = 10; for (let i = 1; i <= N; i++) { _cp.copy(P.pos).addScaledVector(_cb, i / N); if (camBlocked(_cp)) break; ok = i / N; }
+  const target = Math.max(0.0, ok - 0.08); camDist = target < camDist ? target : lerp(camDist, target, Math.min(1, dt * 4));
+  camPos.copy(P.pos).addScaledVector(_cb, camDist); camera.position.copy(camPos);
+}
+// ---------- golden-nectar raids: stay to fill up, but the wasps smell it ----------
+for (const w of wasps) if (w.raider) { w.state = 'idle'; }
+function summonRaid(f) {
+  let n = 0;
+  for (const w of wasps) { if (!w.raider || w.state !== 'idle') continue; const a = rnd(TAU), r = rnd(65, 85);
+    w.p.set(f.sx + Math.cos(a) * r, f.y + rnd(8, 16), f.sz + Math.sin(a) * r); w.v.set(0, 0, 0); w.state = 'approach'; w.t = -n * 2.5; w.target = f; n++; if (n >= 2) break; }
+}
+function richSip(f, dt) {
+  if (!f.raid) { f.raid = true; f.sip = 0.5; summonRaid(f); toast('<b>The golden nectar is flowing</b><br><span>stay to fill your baskets, but wasps can smell it</span>', 4); sweep(200, 240, 1.2, 0.02, 'sawtooth'); }
+  f.sip -= dt;
+  if (f.sip <= 0 && P.pollen < G.cap) { f.sip = 1.05; P.load.push(f.val * 2); P.pollen = P.load.length; tone(SCALE[Math.min(7, P.pollen)], 0.12, 1.8); _v.set(f.sx, f.y + 0.6, f.sz); puff(_v, 14, [1.0, 0.9, 0.4], 1.6, 0.012, 1.4, 0.6, 0.8); if (P.pollen >= G.cap) hint('baskets full: get out of there!', 3); }
+}
+function raiderUpdate(w, d, flying, dt) {
+  // returns [target, speed] or null when parked
+  if (w.state === 'idle') return null;
+  if (w.state === 'approach') {
+    const f = w.target; if (w.t < 0) return [w.p, 0];
+    _wv.set(f.sx + Math.cos(time * 1.4 + w.ph) * 5, f.y + 2.5 + Math.sin(time * 2 + w.ph), f.sz + Math.sin(time * 1.4 + w.ph) * 5);
+    if (w.buzzT <= 0 && d < 70) { w.buzzT = 0.35; sweep(rnd(220, 250), rnd(270, 300), 0.3, 0.012 + 0.04 * (1 - d / 70), 'sawtooth'); }
+    if (flying && P.load.length > 0 && d < 16) { w.state = 'chase'; w.t = 0; sweep(300, 520, 0.35, 0.05, 'sawtooth'); }
+    else if (w.t > 16 || !(f.rich > 0)) { w.state = 'retreat'; w.t = 0; }
+    return [_wv, 15];
+  }
+  if (w.state === 'retreat') {
+    if (!w.away) { w.away = w.p.clone().add(_v.copy(w.p).sub(P.pos).setY(0).normalize().multiplyScalar(90)); w.away.y += 35; }
+    if (w.t > 6) { w.state = 'idle'; w.away = null; }
+    return [w.away, 16];
+  }
+  return undefined; // chase handled by the normal code
+}
+function windHint() { if (camQuiet) return; if (time > G.windHintT) { G.windHintT = time + 7; toast(`<b>The hedge winds are too strong</b><br><span>the orchard opens at 20 honey (you have ${G.honey})</span>`, 4); } }
 // ---------- sun shadows ----------
 const shadowCam = new THREE.OrthographicCamera(-SHADOW_HALF, SHADOW_HALF, SHADOW_HALF, -SHADOW_HALF, 1, 1600);
 const depthVert = `void main(){ mat4 m=modelMatrix;
@@ -1313,4 +1471,4 @@ function adaptRes(ms) {
 }
 
 requestAnimationFrame(frame);
-window.__g = { G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+window.__g = { STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
