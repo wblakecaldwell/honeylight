@@ -91,7 +91,7 @@ const shadowRT = new THREE.WebGLRenderTarget(SHADOW_RES, SHADOW_RES, { depthBuff
 shadowRT.depthTexture = new THREE.DepthTexture(SHADOW_RES, SHADOW_RES); shadowRT.depthTexture.type = THREE.UnsignedIntType;
 shadowRT.depthTexture.compareFunction = THREE.LessEqualCompare; shadowRT.depthTexture.minFilter = shadowRT.depthTexture.magFilter = THREE.LinearFilter;
 const U = { uTime: { value: 0 }, uCam: { value: new V3() }, uSun: { value: SUN }, uGlow: { value: 0 }, uShadow: { value: shadowRT.depthTexture }, uShadowM: { value: new M4() }, uShadowOn: { value: 0 } };
-U.uWind = { value: new V3() };
+U.uWind = { value: new V3() }; U.uHome = { value: new V3(1, 0, 0) }; U.uHomeK = { value: 0 };
 U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 };
 const SWAYGLSL = `uniform float uTime; uniform vec3 uWind; attribute float aSway;
 vec2 sway(vec2 p){ float ph=p.x*0.07+p.y*0.05; float s=sin(uTime*1.3+ph)*0.6+sin(uTime*2.9+ph*1.7)*0.25; return uWind.xy*(uWind.z*0.55+s*(0.35+uWind.z*0.4)); }
@@ -202,7 +202,7 @@ function stick(a, b, r) {
 }
 
 // ---------- sky ----------
-const sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 20), mat(`
+const sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 20), mat(`uniform vec3 uHome; uniform float uHomeK;
 void main(){ vec3 dir=normalize(vL); float e=dir.y;
   vec3 hz=hazeCol(dir), zen=vec3(0.07,0.17,0.46)*uHaze;
   vec3 c=mix(hz,zen,pow(clamp(e,0.,1.),0.5));
@@ -214,6 +214,10 @@ void main(){ vec3 dir=normalize(vL); float e=dir.y;
   vec3 cloudC=mix(vec3(0.78,0.66,0.72), vec3(1.9,1.25,0.7), pow(sd,3.0))*(0.7+0.35*thick);
   cloudC+=vec3(2.2,1.2,0.5)*pow(sd,12.0)*(1.0-thick)*1.2;
   c=mix(c, cloudC*uHaze, cl*0.85);
+  // the sky's light pattern: a faint pearly shimmer standing over home, the way bees read polarized light
+  float hd=max(dot(normalize(dir.xz+vec2(1e-5)),uHome.xz),0.0); float band=pow(hd,30.0)*smoothstep(0.0,0.05,e)*smoothstep(0.9,0.12,e);
+  float shim=0.55+0.45*sin(e*70.0-uTime*1.2+dir.x*9.0+dir.z*9.0);
+  c+=mix(vec3(0.75,0.7,1.1),vec3(0.95,0.85,0.6),smoothstep(0.0,0.4,e))*band*shim*uHomeK*0.5*uHaze;
   float az=atan(dir.z,dir.x); vec2 ac=vec2(cos(az),sin(az));
   float hh=0.03+0.035*vnoise(ac*3.0+2.0)+0.012*vnoise(ac*11.0);
   c=mix(c, mix(vec3(0.20,0.24,0.20),hz,0.62), smoothstep(hh,hh-0.004,e));
@@ -247,9 +251,9 @@ const shaft = new THREE.Mesh(shaftG, mat(`void main(){ vec3 V=normalize(uCam-vW)
 shaft.position.set(3.4, TY - 0.6, 0); shaft.rotation.z = 0.09; scene.add(shaft);
 
 // ---------- comb ----------
-const combUniforms = { uHoney: { value: 0 }, uPulse: { value: 0 }, uBirth: { value: new THREE.Vector4(BIRTH_ID.x, BIRTH_ID.y, 0, 1) } };
+const combUniforms = { uLarva: { value: 3 }, uHoney: { value: 0 }, uPulse: { value: 0 }, uBirth: { value: new THREE.Vector4(BIRTH_ID.x, BIRTH_ID.y, 0, 1) } };
 const combFrag = `
-uniform float uHoney; uniform float uPulse; uniform vec4 uBirth; uniform float uCombZ;
+uniform float uHoney; uniform float uPulse; uniform vec4 uBirth; uniform float uCombZ; uniform float uLarva;
 const vec2 HS=vec2(1.0,1.7320508);
 vec4 hexC(vec2 uv){ vec4 hC=floor(vec4(uv,uv-vec2(0.5,1.0))/HS.xyxy)+0.5;
   vec4 h=vec4(uv-hC.xy*HS, uv-(hC.zw+0.5)*HS);
@@ -282,6 +286,30 @@ void main(){
   else if(ef<0.43){
     float ao=mix(1.0,0.22,D);
     if(kind==0){ col=wax*ao*0.8; }
+    else if(kind==1 && uLarva>0.5){
+      // detailed brood: a plump, segmented grub lying curled in a milky pool of royal jelly
+      float wig = uLarva>2.5 ? sin(uTime*1.3+r2*40.0)*0.4+sin(uTime*3.1+r2*11.0)*0.08 : 0.0, br = uLarva>2.5 ? 1.0+0.06*sin(uTime*2.3+r2*17.0) : 1.0;
+      float ang0=r2*6.2832+wig; vec2 q=mat2(cos(ang0),-sin(ang0),sin(ang0),cos(ang0))*pf;
+      float stage = uLarva>1.5 ? r2*1.37 - floor(r2*1.37) : 0.8; // 0..0.18 egg, ..0.45 young, else big
+      float ra = stage<0.45 ? 0.11 : 0.19, rb = (stage<0.45 ? 0.05 : 0.095)*br;
+      vec2 sc=vec2(sin(2.75),cos(2.75)); vec2 qa=vec2(abs(q.x),q.y);
+      float cl = (sc.y*qa.x>sc.x*qa.y) ? length(qa-sc*ra) : abs(length(q)-ra);
+      float tk = rb*(0.82+0.3*smoothstep(-0.6,0.9,q.y/ra)); // thicker tail, slimmer head end
+      float jelly = smoothstep(0.37,0.33,length(pf+vec2(0.0,0.03)));
+      vec3 jc = mix(vec3(0.86,0.82,0.66),vec3(1.0,0.97,0.86),vnoise(pf*9.0+r2*30.0+uTime*(uLarva>2.5?0.2:0.0))); jc += vec3(0.5)*smoothstep(0.82,0.9,vnoise(pf*30.0+r2*50.0)); // little bubbles
+      col = mix(wax*ao*0.6, jc*0.42, jelly*0.85*(stage<0.18?0.0:1.0)); spec=mix(0.1,1.3,jelly); sss=0.6;
+      col *= 1.0-0.55*smoothstep(tk+0.05,tk,cl)*step(0.18,stage); // the grub's soft shadow in the jelly
+      vec3 nn=n;
+      if(stage<0.18){ // a single egg, standing like a tiny grain of rice
+        float ed=length(q*vec2(1.0,0.55)); if(ed<0.07){ float hz=sqrt(max(0.0,1.0-ed*ed/0.0049)); nn=normalize(vec3(q*vec2(1.0,0.3)/0.07*(1.0-hz),hz*sgn)); col=vec3(0.97,0.95,0.9); spec=1.0; sss=1.2; } }
+      else if(cl<tk){ float u=cl/tk, hz=sqrt(max(0.0,1.0-u*u)); vec2 g=normalize(length(q)>ra ? q : -q)*(length(q)-ra>0.0?1.0:-1.0); if(sc.y*qa.x>sc.x*qa.y) g=normalize(qa-sc*ra)*vec2(sign(q.x),1.0);
+        nn=normalize(vec3(g*u*0.9,hz*sgn+0.0001)); float a=atan(q.y,q.x);
+        float seg=0.7+0.3*smoothstep(-0.2,0.6,sin(a*(stage<0.45?8.0:11.0)-(uLarva>2.5?uTime*3.0+r2*9.0:0.0))); // a slow squirm rolls down the body float spir=smoothstep(0.018,0.008,length(vec2(fract(a*15.0/6.2832)-0.5,(u-0.55)*0.6)*vec2(0.06,1.0))*8.0);
+        col=mix(vec3(1.0,0.96,0.86),vec3(0.93,0.9,0.72),smoothstep(0.3,0.9,u))*seg*(0.75+0.3*hz); col=mix(col,vec3(0.78,0.74,0.58),smoothstep(0.55,0.75,vnoise(q*40.0+r2*9.0))*0.25); // waxy, slightly see-through skin col=mix(col,vec3(0.55,0.42,0.30),spir*0.6*step(0.45,stage)); spec=1.5; sss=1.5; // wet
+        // the head end: a slightly golden, glossier cap
+        float head=smoothstep(0.06,0.0,length(q-vec2(-sc.x,sc.y)*ra)); col=mix(col,vec3(0.98,0.88,0.62),head*0.6); }
+      n=nn;
+    }
     else if(kind==1){ float rr=length(pf); float ang=atan(pf.y,pf.x)+r2*6.28;
       float body=smoothstep(0.09,0.14,rr)*smoothstep(0.34,0.29,rr)*smoothstep(-0.9,-0.6,cos(ang));
       float seg=0.85+0.15*sin(ang*9.0);
@@ -292,6 +320,19 @@ void main(){
       col=vec3(0.85,0.36,0.03)*(0.55+0.3*sh); spec=1.2; sss=1.2;
       emis=vec3(0.55,0.22,0.02)*(0.35+0.25*uGlow+1.2*uPulse*(0.5+0.5*sin(uTime*5.0+r2*40.0))); }
   } else { float t=clamp((0.43-e)/max(ef-e,1e-3),0.0,1.0); col=wax*mix(0.95,0.22,t); if(kind==4) emis=vec3(0.3,0.12,0.01)*t*(0.4+uPulse); }
+  if(kind==2 && uLarva>1.5 && r2<0.3){ // some cells still open: a pale pupa, eyes darkening with age
+    float D2=0.6; vec2 pp=h.xy - V.xy/max(abs(V.z),0.3)*D2*0.55; float ep=hexD(pp);
+    if(ep<0.43){ float ao2=0.45; vec2 q=pp; float a0=r2*20.0; q=mat2(cos(a0),-sin(a0),sin(a0),cos(a0))*q;
+      col=wax*ao2*0.55; spec=0.1; vec3 nn=n; float b=0.0; vec2 g=vec2(0.0); float u=1.0;
+      float dh=length((q-vec2(0.0,0.2))/vec2(0.12,0.10)), dt=length((q-vec2(0.0,0.04))/vec2(0.12,0.11)), da=length((q-vec2(0.0,-0.17))/vec2(0.13,0.17));
+      float dm=min(dh,min(dt,da)); if(dm<1.0){ u=dm; float hz=sqrt(max(0.0,1.0-u*u)); vec2 c=dm==dh?vec2(0.0,0.2):dm==dt?vec2(0.0,0.04):vec2(0.0,-0.17); g=normalize(q-c+1e-4);
+        nn=normalize(vec3(g*u*0.9,hz*sgn+0.0001)); float age2=fract(r2*7.3);
+        col=vec3(0.95,0.91,0.82)*(0.8+0.2*hz); if(dm==da) col*=0.85+0.15*smoothstep(-0.3,0.5,sin((q.y+0.17)*70.0));
+        float eye=smoothstep(0.05,0.035,min(length(q-vec2(-0.075,0.22)),length(q-vec2(0.075,0.22))));
+        col=mix(col,mix(vec3(0.75,0.35,0.55),vec3(0.12,0.06,0.08),age2),eye); spec=0.6; sss=1.1; }
+      n=nn; }
+    else { float t2=clamp((0.43-e)/max(ep-e,1e-3),0.0,1.0); col=wax*mix(0.95,0.25,t2); }
+  }
   col=mix(col, wax*1.1, rim); spec=mix(spec,0.3,rim); emis*=1.0-rim;
   gl_FragColor=vec4(finish(shade(col,n,vW,spec,sss)+emis,vW),1.0);
 }`;
@@ -343,9 +384,11 @@ const capPieces = [];
 function resetCap() { for (const m of capPieces) { m.userData.on = true; m.userData.life = 0; m.visible = true; m.position.copy(m.userData.home); m.rotation.set(0, 0, 0); } }
 
 // ---------- bees ----------
-const BEE_VERT = VERT.replace('void main(){', 'uniform float uTime; attribute vec4 aMove;\nvoid main(){').replace('vec4 w = m*vec4(position,1.0);', `vec3 pp=position; float isLeg=0.0;
+const BEE_VERT = VERT.replace('void main(){', 'uniform float uTime; attribute vec4 aMove; attribute float aPol; varying float vPol;\nvoid main(){').replace('vec4 w = m*vec4(position,1.0);', `vec3 pp=position; float isLeg=0.0; vPol=0.0;
   #ifdef USE_COLOR
   isLeg=step(abs(color.r-0.05),0.004)*step(abs(color.g-0.03),0.004)*step(abs(color.b-0.02),0.003);
+  float isPol=step(abs(color.r-0.93),0.004)*step(abs(color.g-0.64),0.004)*step(abs(color.b-0.09),0.004);
+  vec3 polC=vec3(sign(pp.x)*0.335,-0.08,-0.175); pp=mix(pp,polC+(pp-polC)*aPol,isPol); isLeg=max(isLeg,isPol); vPol=isPol;
   #endif
   float reach=clamp((abs(pp.x)-0.06)/0.3,0.0,1.0); float ph=aMove.z, fl=aMove.w;
   float wig=0.0;
@@ -376,14 +419,18 @@ const beeGeo = (() => {
     const hip = [s * 0.1, -0.08, z0], knee = [s * 0.28, 0.02, (z0 + z1) / 2], ankle = [s * 0.34, -0.17, z1], toe = [s * 0.37, -0.25, z1 + (k === 2 ? -0.05 : 0.04)];
     parts.push({ g: stick(hip, knee, 0.016), c: leg }, { g: stick(knee, ankle, k === 2 ? 0.024 : 0.012), c: leg }, { g: stick(ankle, toe, 0.007), c: leg });
   }
+  // pollen packed into the hind-leg baskets (scaled per bee in the shader by aPol)
+  for (const s of [1, -1]) parts.push({ g: ell(0.064, 0.06, 0.088, s * 0.335, -0.08, -0.175, 14), c: [0.93, 0.64, 0.09] });
   return geoParts(parts);
 })();
 
 const MAXB = 260; const beeMove = new Float32Array(MAXB * 4); beeGeo.setAttribute('aMove', new THREE.InstancedBufferAttribute(beeMove, 4));
-const beeMat = mat(`void main(){ vec3 n=normalize(vN); vec3 V=normalize(uCam-vW);
+const beePol = new Float32Array(MAXB); beeGeo.setAttribute('aPol', new THREE.InstancedBufferAttribute(beePol, 1));
+const beeMat = mat(`varying float vPol; void main(){ vec3 n=normalize(vN); vec3 V=normalize(uCam-vW);
   float fz=hash21(floor(vL.xy*90.0)+floor(vL.z*90.0)); float isF=smoothstep(0.2,0.5,vC.g/(vC.r+0.001)-0.3)*step(0.2,vC.r);
   vec3 alb=vC*(0.8+0.45*fz);
   float isEye=step(vC.r,0.02); if(isEye>0.5){ vec2 hp=vL.yz*150.0; vec2 fc=fract(hp+vec2(0.0,0.5*mod(floor(hp.x),2.0)))-0.5; n=normalize(n+vec3(0.0,fc)*0.07); alb=vec3(0.015,0.013,0.012); }
+  if(vPol>0.5){ vec3 gq=floor(vL*150.0); vec3 gr=vec3(hash21(gq.xy),hash21(gq.yz+3.1),hash21(gq.xz+7.7))-0.5; n=normalize(n+gr*0.6); alb=vec3(0.95,0.55,0.07)*(0.7+0.55*hash21(gq.xy+gq.z*1.7)); }
   float rimv=pow(1.0-max(dot(n,V),0.0),2.0);
   float lum=dot(alb,vec3(0.33)); float hard=1.0-smoothstep(0.02,0.12,lum);
   alb*=mix(1.0,0.32,hard); vec3 c=shade(alb,n,vW,0.25+0.5*hard+0.5*isEye,0.25);
@@ -480,6 +527,7 @@ function makeForager() {
     if (!b.D) { const f = flowers[(Math.random() * Math.min(flowers.length, 110)) | 0]; b.D = f ? new V3(f.x, f.y + 1.2, f.z) : new V3(100, 0, 60); }
     let u = (t + b.t0) % total, k = 0; while (u > seg[k]) { u -= seg[k]; k++; } const f = smooth(0, 1, u / seg[k]);
     const pts = [b.A, B, C, b.D, b.D, C, B, b.A, b.A], P0 = pts[k], P1 = pts[k + 1];
+    b.pol = k === 3 ? f * 0.8 : (k >= 4 && k <= 6) ? 0.8 : k === 7 ? 0.8 * (1 - f) : 0;
     b.p.lerpVectors(P0, P1, f); if (k === 2 || k === 4) b.p.y += Math.sin(f * Math.PI) * 9;
     const w = (k === 1 || k === 5) ? 0.35 : 1; b.p.x += Math.sin(t * 1.7 + b.ph) * 0.5 * w + b.off.x * w; b.p.y += Math.sin(t * 2.3 + b.ph * 2) * 0.35 * w + b.off.y * w; b.p.z += Math.cos(t * 1.9 + b.ph) * 0.5 * w + b.off.z * w;
     if (k === 7 && u > seg[7] - 0.1) b.D = null;
@@ -503,7 +551,7 @@ function updateBees(dt, t) {
     if (dt > 0) { if (b.vel) _v.copy(b.vel); else _v.copy(b.p).sub(b.lp).multiplyScalar(1 / dt); b.lp.copy(b.p); _q.copy(b.q).invert(); _v.applyQuaternion(_q);
       b.ax = b.ax === undefined ? 0 : b.ax; const fz = clamp(_v.z * 0.05, -0.8, 1.4); b.mx = lerp(b.mx, fz + (fz - (b.pz || 0)) * 0.0, Math.min(1, dt * 4)); b.pz = fz;
       b.my = lerp(b.my, b.bank !== undefined ? b.bank : clamp(-_v.x * 0.08, -1, 1), Math.min(1, dt * 3)); }
-    beeMove[i * 4] = b.mx; beeMove[i * 4 + 1] = b.my; beeMove[i * 4 + 2] = b.ph * 7; beeMove[i * 4 + 3] = b.fly ? 1 : 0;
+    beeMove[i * 4] = b.mx; beeMove[i * 4 + 1] = b.my; beeMove[i * 4 + 2] = b.ph * 7; beeMove[i * 4 + 3] = b.fly ? 1 : 0; beePol[i] = b.pol || 0;
     _bm.compose(b.p, b.q, b.s); beeMesh.setMatrixAt(i, _bm);
     for (let s = 0; s < 2; s++) {
       const sg = s ? -1 : 1;
@@ -512,7 +560,7 @@ function updateBees(dt, t) {
       _wm.multiplyMatrices(_bm, _t); wingMesh.setMatrixAt(i * 2 + s, _wm);
     }
   }
-  beeMesh.instanceMatrix.needsUpdate = true; wingMesh.instanceMatrix.needsUpdate = true; beeGeo.attributes.aMove.needsUpdate = true;
+  beeMesh.instanceMatrix.needsUpdate = true; wingMesh.instanceMatrix.needsUpdate = true; beeGeo.attributes.aMove.needsUpdate = true; beeGeo.attributes.aPol.needsUpdate = true;
 }
 
 // ---------- dance streak + shimmer trail ----------
@@ -545,14 +593,12 @@ function makeMotes(N, box, center, wrap, size, colr) {
     vertexShader: `attribute float aP; uniform float uTime; uniform vec3 uBox; uniform vec3 uCen; uniform vec3 uCam; varying float vA;
       void main(){ vec3 p=position+vec3(sin(uTime*0.21+aP),uTime*0.12+sin(uTime*0.3+aP*2.0)*0.5,cos(uTime*0.17+aP*1.3))*${wrap ? '2.5' : '0.8'};
       ${wrap ? 'p=mod(p-uCam+uBox,uBox*2.0)-uBox+uCam;' : 'p=mod(p+uBox,uBox*2.0)-uBox+uCen;'}
-      vec4 mv=viewMatrix*vec4(p,1.0); float dz=-mv.z; vA=smoothstep(0.15,0.8,dz)*(0.4+0.6*sin(uTime*0.9+aP*7.0));
+      vec4 mv=viewMatrix*vec4(p,1.0); float dz=-mv.z; vA=smoothstep(0.15,0.8,dz)*max(0.0,0.4+0.6*sin(uTime*0.9+aP*7.0));
       ${wrap ? 'float ih=(1.0-smoothstep(11.6,12.4,length(p.xz)))*step(-0.5,p.y)*step(p.y,22.6); vA*=1.0-ih;' : 'vA*=step(length(p.xz),9.6)*(0.35+60.0/(10.0+dot(p-vec3(10.6,3.0,0.0),p-vec3(10.6,3.0,0.0))));'}
       gl_PointSize=min(${size.toFixed(1)}*(0.6+fract(aP)*0.9)/max(dz,0.2), 60.0); gl_Position=projectionMatrix*mv; }`,
-    fragmentShader: UNTONE + `uniform float uAmt; varying float vA; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.25,d)*(0.55+0.45*smoothstep(0.3,0.45,d)); gl_FragColor=vec4(untone(vec3(${colr})*a*vA*uAmt)*1.4,1.0); }` });
+    fragmentShader: UNTONE + `uniform float uAmt; varying float vA; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.25,d)*(0.55+0.45*smoothstep(0.3,0.45,d)); gl_FragColor=vec4(untone(max(vec3(${colr})*a*vA*uAmt,0.0))*1.4,1.0); }` });
   const pts = new THREE.Points(g, m); pts.frustumCulled = false; scene.add(pts); return m;
 }
-makeMotes(320, new V3(10, 11, 10), new V3(0, 11, 0), false, 22, '0.40,0.27,0.10');
-makeMotes(260, new V3(22, 14, 22), new V3(), true, 60, '0.42,0.33,0.16');
 
 // ---------- particles ----------
 const PN = 420, pPos = new Float32Array(PN * 3), pCol = new Float32Array(PN * 4), pSize = new Float32Array(PN), parts = [];
@@ -596,11 +642,35 @@ const blobG = new THREE.IcosahedronGeometry(1, 3);
 function canopy(x, y, z, r, n) { for (let i = 0; i < n; i++) { const m = new THREE.Mesh(blobG, leafMat); const a = rnd(TAU), d = rnd(0.2, 1) * r; m.position.set(x + Math.cos(a) * d, y + rnd(-0.25, 0.4) * r, z + Math.sin(a) * d); m.scale.set(r * rnd(0.5, 0.8), r * rnd(0.35, 0.55), r * rnd(0.5, 0.8)); scene.add(m); } }
 canopy(0, 95, 0, 55, 9);
 for (let i = 0; i < 9; i++) { const a = i / 9 * TAU + rnd(0.4), d = rnd(260, 420), x = Math.cos(a) * d, z = Math.sin(a) * d, R = rnd(6, 11), b = terrainH(x, z); const t = new THREE.Mesh(trunkGeo(R, b, 70), barkMat); t.position.set(x, 0, z); scene.add(t); canopy(x, b + 80, z, rnd(35, 50), 6); }
+// the dew run: a worn little track through thick grass, threading under the dew arches
+const DEWPATH = (() => { const H = HILLS[0], A = new V3(FDIR.x * 135, 0, FDIR.z * 135), B = new V3(H.x + Math.cos(Math.atan2(-H.z, -H.x) + 0.5) * (H.r + 12), 0, H.z + Math.sin(Math.atan2(-H.z, -H.x) + 0.5) * (H.r + 12));
+  const N = 7, pts = [], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz), sx = -dz / L, sz = dx / L;
+  for (let i = 0; i < N; i++) { const t = (i + 0.5) / N, wob = Math.sin(t * 7.0) * 14; pts.push(new V3(lerp(A.x, B.x, t) + sx * wob, 0, lerp(A.z, B.z, t) + sz * wob)); }
+  const pre = pts[0].clone().addScaledVector(pts[0].clone().sub(pts[1]).normalize(), 18), post = pts[N - 1].clone().addScaledVector(pts[N - 1].clone().sub(pts[N - 2]).normalize(), 14);
+  const c = new THREE.CatmullRomCurve3([pre, ...pts, post], false, 'centripetal'), S = c.getSpacedPoints(Math.ceil(c.getLength() / 1.2));
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const p of S) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
+  return { S, box: [x0 - 10, x1 + 10, z0 - 10, z1 + 10] }; })();
+function dewPathD(x, z) { const b = DEWPATH.box; if (x < b[0] || x > b[1] || z < b[2] || z > b[3]) return 1e9; let m = 1e18; for (const p of DEWPATH.S) { const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < m) m = d; } return Math.sqrt(m); }
+{ const S = DEWPATH.S, pos = [], uv = [], idx = [], W = 2.6;
+  S.forEach((p, i) => { const a = S[Math.max(0, i - 1)], b = S[Math.min(S.length - 1, i + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const L = Math.hypot(tx, tz) || 1; tx /= L; tz /= L;
+    const w = W * (0.85 + 0.3 * Math.sin(i * 0.37) * Math.sin(i * 0.13));
+    for (const s of [-1, 1]) { const x = p.x - tz * s * w, z = p.z + tx * s * w; pos.push(x, terrainH(x, z) + 0.06, z); uv.push(s < 0 ? 0 : 1, i * 0.4); }
+    if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); } });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = mat(`void main(){ vec3 n=vec3(0.0,1.0,0.0); float a=fbm(vW.xz*0.9), f=vnoise(vW.xz*6.0);
+    vec3 alb=mix(vec3(0.16,0.11,0.06),vec3(0.36,0.27,0.16),a)*(0.8+0.35*f);
+    float ed=min(vUv.x,1.0-vUv.x); float al=smoothstep(0.02,0.32+0.12*vnoise(vW.xz*0.7),ed);
+    alb=mix(vec3(0.20,0.24,0.08),alb,smoothstep(0.1,0.4,ed));
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.03,0.0),vW),al); }`, { transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 1; scene.add(mesh); }
 // grass
 let grassMesh;
 {
-  const N = 34000, off = new Float32Array(N * 3), par = new Float32Array(N * 4); let n = 0, guard = 0;
-  while (n < N && guard++ < N * 4) { const a = rnd(TAU), d = Math.sqrt(Math.random()) * 330 + 14, x = Math.cos(a) * d, z = Math.sin(a) * d, h = terrainH(x, z); if (h < WY + 0.6) continue;
+  const N = 84000, NB = 9000, off = new Float32Array((N + NB) * 3), par = new Float32Array((N + NB) * 4); let n = 0, guard = 0;
+  // thick walls of taller grass hugging the dew run, so the track reads as a tight little path
+  for (let k = 0; k < NB * 3 && n < NB; k++) { const p = DEWPATH.S[(Math.random() * DEWPATH.S.length) | 0], a = rnd(TAU), r = rnd(2.5, 8), x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, h = terrainH(x, z);
+    if (h < WY + 0.6 || dewPathD(x, z) < 2.5) continue; off[n * 3] = x; off[n * 3 + 1] = h - 0.2; off[n * 3 + 2] = z; par[n * 4] = rnd(8, 14); par[n * 4 + 1] = rnd(TAU); par[n * 4 + 2] = rnd(TAU); par[n * 4 + 3] = rnd(0.7, 1.15); n++; }
+  while (n < N + NB && guard++ < N * 4) { const a = rnd(TAU), d = Math.sqrt(Math.random()) * 330 + 14, x = Math.cos(a) * d, z = Math.sin(a) * d, h = terrainH(x, z); if (h < WY + 0.6 || dewPathD(x, z) < 2.4) continue;
     off[n * 3] = x; off[n * 3 + 1] = h - 0.2; off[n * 3 + 2] = z; par[n * 4] = rnd(4, 11) * (h < WY + 3 ? 1.5 : 1); par[n * 4 + 1] = rnd(TAU); par[n * 4 + 2] = rnd(TAU); par[n * 4 + 3] = rnd(0.7, 1.25); n++; }
   const g = new THREE.InstancedBufferGeometry(); g.instanceCount = n;
   g.setAttribute('position', new THREE.Float32BufferAttribute([-.5, 0, 0, .5, 0, 0, -.5, .5, 0, .5, .5, 0, 0, 1, 0], 3)); g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
@@ -1102,7 +1172,7 @@ function initAudio() {
   } catch (e) { A.ctx = null; }
 }
 function tone(f, vol = 0.12, dur = 1.6, type = 'sine', when = 0) {
-  if (!A.ctx) return; const c = A.ctx, t = c.currentTime + when, o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.value = f;
+  if (!A.ctx || !isFinite(f)) return; const c = A.ctx, t = c.currentTime + when, o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.value = f;
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(A.master); g.connect(A.echo); o.start(t); o.stop(t + dur + 0.05);
   const o2 = c.createOscillator(), g2 = c.createGain(); o2.frequency.value = f * 2.76; g2.gain.setValueAtTime(vol * 0.25, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.35); o2.connect(g2); g2.connect(A.master); o2.start(t); o2.stop(t + dur);
 }
@@ -1183,7 +1253,7 @@ function collide(p, v) {
   { const A = LOG.axis, dx = p.x - LOG.c.x, dy = p.y - LOG.c.y, dz = p.z - LOG.c.z, u = dx * A.x + dy * A.y + dz * A.z;
     if (Math.abs(u) < LOG.len / 2 + PR) { const px = dx - A.x * u, py = dy - A.y * u, pz = dz - A.z * u, r = Math.hypot(px, py, pz);
       if (r < LOG.ro + PR && r > LOG.ri - PR) { const t = r < (LOG.ri + LOG.ro) / 2 ? LOG.ri - PR : LOG.ro + PR, k = t / Math.max(r, 0.01); p.x = LOG.c.x + A.x * u + px * k; p.y = LOG.c.y + A.y * u + py * k; p.z = LOG.c.z + A.z * u + pz * k; } } }
-  archCollide(p);
+  archCollide(p, v);
   for (const s of STONES) { const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz); if (d < 8 && p.y < s.y + 0.4 + PR) { if (d > 6.5) { const k = 8 / Math.max(d, 0.01); p.x = s.x + dx * k; p.z = s.z + dz * k; } else { p.y = s.y + 0.4 + PR; v.y = Math.max(v.y, 0); } } }
   const tr = trunkR(p.y) + PR; if (rad < tr && p.y < 92) { const k = tr / Math.max(rad, 0.01); p.x *= k; p.z *= k; }
   const gy = terrainH(p.x, p.z) + PR; if (p.y < gy) { p.y = gy; v.y = Math.max(v.y, 0); }
@@ -1217,7 +1287,7 @@ function update(dt) {
       if (P.chews >= 3 && !hero.active && P.lives === 1) { hero.active = true; hero.look = new V3(BIRTH.x, BIRTH.y, BIRTH.z - 0.5); if (hero.p.distanceTo(P.pos) > 6) hero.p.set(BIRTH.x + 2, BIRTH.y + 1.5, BIRTH.z + 1.4); }
       if (hero.active) hero.tp.set(BIRTH.x + Math.sin(time * 0.9) * 0.08, BIRTH.y + 0.02 + Math.sin(time * 1.4) * 0.05, BIRTH.z + 0.62); }
   } else if (P.mode === 'emerge') {
-    const f = smooth(0, 1.8, P.t); P.pos.set(BIRTH.x, BIRTH.y, lerp(BIRTH.z - 0.62, BIRTH.z + 0.42, f)); P.pos.y += Math.sin(P.t * 9) * 0.012;
+    const f = smooth(0, 1.8, P.t); P.pos.set(BIRTH.x, BIRTH.y, lerp(BIRTH.z - 0.62, BIRTH.z + 0.24, f)); P.pos.y += Math.sin(P.t * 9) * 0.012;
     if (P.lives === 1) { hero.active = true; if (!hero.look) hero.look = new V3(); hero.tp.set(BIRTH.x + 0.9, BIRTH.y + 0.35, BIRTH.z + 1.15); hero.look.copy(P.pos); }
     if (P.t > 1.8) { P.mode = 'crawl'; P.t = 0; heroT = 0; if (P.lives === 1) hint('<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk &nbsp;·&nbsp; mouse look', 7); }
   } else if (P.mode === 'crawl') {
@@ -1225,7 +1295,7 @@ function update(dt) {
     tmp.set(fwd.x, fwd.y, 0); if (tmp.length() < 0.35) { tmp.set(0, 1, 0).applyQuaternion(camera.quaternion); tmp.z = 0; if (fwd.z > 0) tmp.multiplyScalar(-1); } tmp.normalize();
     _v.set(right.x, right.y, 0); if (_v.lengthSq() > 1e-4) _v.normalize();
     const sp = 1.7; P.pos.x += (tmp.x * kf + _v.x * ks) * sp * dt; P.pos.y += (tmp.y * kf + _v.y * ks) * sp * dt;
-    P.pos.x = clamp(P.pos.x, -c.hw + 0.3, c.hw - 0.3); P.pos.y = clamp(P.pos.y, c.yb + 0.4, HTOP - 0.5); P.pos.z = c.z + CT / 2 + 0.42;
+    P.pos.x = clamp(P.pos.x, -c.hw + 0.3, c.hw - 0.3); P.pos.y = clamp(P.pos.y, c.yb + 0.4, HTOP - 0.5); P.pos.z = c.z + CT / 2 + 0.24; P.cdir.copy(tmp);
     if (kf || ks) bob += dt * 11;
     // the sister's greeting
     heroT += dt; if (hero.active) { if (heroT < 3) { if (heroT < dt * 1.5) hero.tp.copy(P.pos).addScaledVector(fwd, 0.95); hero.tp.z = clamp(hero.tp.z, c.z + 1.0, c.z + 2.0); hero.look.copy(P.pos); if (heroT > 1.2 && !hero.fed) { hero.fed = true; tone(659.25, 0.1, 2); tone(880, 0.08, 2.2, 'sine', 0.18); puff(hero.p, 8, [1, 0.8, 0.3], 0.4, 0.01, 1.2); } } else { hero.active = false; hero.fed = false; } }
@@ -1483,11 +1553,11 @@ function bloomH(f, d) {
   return Math.max(dome, pet) + Math.abs(f.ax || 0) * d + Math.abs(f.az || 0) * d;
 }
 function flowerHit(f, d, dt) {
-  const p = P.pos, v = P.vel, big = f.giant ? 1.5 : 0, Rh = f.r * 0.75 + f.len * 0.85, bot = f.y - 1.4 - big, sr = 0.25 * (f.sw || 1) + PR;
+  const p = P.pos, v = P.vel, big = f.giant ? 1.5 : 0, cl = f.lily ? 0 : U.uClose.value, tE = Math.min(1.45, f.tilt + cl * 1.2), Rh = lerp(f.r * 0.75 + f.len * 0.85, f.r * 0.75 + f.len * Math.cos(tE) * 0.95 + 0.25, cl), bot = f.y - 1.4 - big, sr = 0.25 * (f.sw || 1) + PR;
   const fx = f.sx, fz = f.sz;
   if (p.y < bot) { if (d < sr) { const k = sr / Math.max(d, 0.01); p.x = fx + (p.x - fx) * k; p.z = fz + (p.z - fz) * k; } return false; }
   if (d > Rh + PR) return false;
-  const top = f.y + bloomH(f, Math.min(d, Rh)) + PR + 0.15;
+  const top = f.y + (cl > 0.01 ? lerp(bloomH(f, Math.min(d, Rh)), f.len * (Math.sin(tE) + 0.24) + Math.abs(f.ax || 0) * d, cl) : bloomH(f, Math.min(d, Rh))) + PR + 0.15;
   if (p.y > top + 0.001) return false;
   const pt = top - p.y, pb = p.y - bot, ps = Rh + PR - d;
   if (pt <= pb && pt <= 1.6 + big + ps) { p.y = top; v.y = Math.max(v.y, 0); v.x *= 1 - Math.min(1, dt * 5); v.z *= 1 - Math.min(1, dt * 5); P.landed = f; p.x += f.dsx; p.z += f.dsz; return d < Rh * 0.85; } // only the top of the bloom gives pollen
@@ -1537,9 +1607,22 @@ function updateAirLife(dt) {
     puff(_v, 1, Math.random() < 0.6 ? [1.0, 0.62, 0.75] : [1.0, 0.92, 0.9], 0, 0.011, 6); q.g = 0; q.v.set(WIND.dx * 6 * WIND.s + rnd(-1, 1), -rnd(1.5, 3), WIND.dz * 6 * WIND.s + rnd(-1, 1));
   }
 }
-function archCollide(p) {
-  for (const a of ARCHES) { if (Math.abs(p.x - a.cx) > a.w + 3 || Math.abs(p.z - a.cz) > a.w + 3) continue;
-    for (const s of a.samples) { const dx = p.x - s.x, dy = p.y - s.y, dz = p.z - s.z, d = Math.hypot(dx, dy, dz), r = 0.32 + PR; if (d < r) { const k = r / Math.max(d, 0.01); p.x = s.x + dx * k; p.y = s.y + dy * k; p.z = s.z + dz * k; } } }
+// the arches are solid stems: a swept capsule test so a fast bee can't slip through between frames
+const _aPrev = new V3(), _aD1 = new V3(), _aD2 = new V3(), _aR = new V3(), _aC1 = new V3(), _aC2 = new V3(), _aN = new V3(); let _aHas = false;
+function segSeg(p1, q1, p2, q2) { _aD1.subVectors(q1, p1); _aD2.subVectors(q2, p2); _aR.subVectors(p1, p2);
+  const a = _aD1.dot(_aD1), e = _aD2.dot(_aD2), f = _aD2.dot(_aR); let s, t;
+  if (a < 1e-8) { s = 0; t = clamp(f / e, 0, 1); } else { const c = _aD1.dot(_aR); const b = _aD1.dot(_aD2), den = a * e - b * b;
+    s = den > 1e-8 ? clamp((b * f - c * e) / den, 0, 1) : 0; t = (b * s + f) / e; if (t < 0) { t = 0; s = clamp(-c / a, 0, 1); } else if (t > 1) { t = 1; s = clamp((b - c) / a, 0, 1); } }
+  _aC1.copy(p1).addScaledVector(_aD1, s); _aC2.copy(p2).addScaledVector(_aD2, t); return _aC1.distanceTo(_aC2); }
+function archCollide(p, v) {
+  if (!_aHas || _aPrev.distanceTo(p) > 6) _aPrev.copy(p); _aHas = true; const r = 0.34 + PR;
+  for (const a of ARCHES) { if (Math.abs(p.x - a.cx) > a.w + 4 || Math.abs(p.z - a.cz) > a.w + 4) continue;
+    const S = a.samples; for (let i = 0; i < S.length - 1; i++) {
+      if (segSeg(_aPrev, p, S[i], S[i + 1]) >= r) continue;
+      _aN.subVectors(_aC1, _aC2); let L = _aN.length(); if (L < 1e-4) { _aN.subVectors(_aPrev, _aC2); L = _aN.length() || 1; } _aN.multiplyScalar(1 / L);
+      p.copy(_aC2).addScaledVector(_aN, r + 0.01); if (v) { const vn = v.dot(_aN); if (vn < 0) v.addScaledVector(_aN, -vn * 1.3); }
+    } }
+  _aPrev.copy(p);
 }
 // ---------- third-person view (V) ----------
 try { G.third = localStorage.getItem('honeylight.view') === '3'; } catch (e) { G.third = false; }
@@ -1547,6 +1630,8 @@ const me = newBee(1); me.s.set(0.001, 0.001, 0.001);
 const _yflip = new Q4().setFromAxisAngle(YA, Math.PI);
 const _meE = new THREE.Euler(0, 0, 0, 'YXZ');
 me.update = () => { const on = G.third && camDist > 0.7 && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6, P.yaw, P.roll * 1.3)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.6, -1.2, 1.2); me.fly = P.mode === 'fly'; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
+P.cdir = new V3(0, 1, 0);
+{ const mu = me.update; me.update = (dt, t) => { mu(dt, t); if (P.mode === 'crawl') { orient(me.q, P.cdir, ZA); me.p.z -= 0.04; me.bank = 0; } const tg = P.pollen > 0 ? 0.5 + 0.75 * Math.min(1, P.pollen / G.cap) : 0; me.pol = lerp(me.pol || 0, tg, Math.min(1, (dt || 0) * 5)); }; }
 addEventListener('keydown', e => { if (e.code === 'KeyV' && !e.repeat) { G.third = !G.third; try { localStorage.setItem('honeylight.view', G.third ? '3' : '1'); } catch (er) { } hint(G.third ? 'view from behind &nbsp; <kbd>V</kbd> to switch back' : 'bee\'s-eye view', 2.5); } });
 const _cp = new V3(), _cb = new V3(), _cd = new V3(), _cz = new V3();
 let camQuiet = false, camDist = 0;
@@ -1556,10 +1641,13 @@ function thirdPerson(dt) {
   if (!G.third || P.mode === 'title' || P.mode === 'cell' || P.mode === 'emerge' || P.mode === 'gulp') { camDist = 0; return; }
   const want = inHive ? 1.7 : 3.2, up = inHive ? 0.3 : 0.38;
   _cb.set(0, up, want).applyQuaternion(camera.quaternion); // behind and a little above, in view space
+  if (P.mode === 'crawl') { _cb.copy(P.cdir).multiplyScalar(-1.6); _cb.z += 1.0; }
   // pull in if something solid is between the bee and the camera
   let ok = 0; const N = 10; for (let i = 1; i <= N; i++) { _cp.copy(P.pos).addScaledVector(_cb, i / N); if (camBlocked(_cp)) break; ok = i / N; }
   const target = Math.max(0.0, ok - 0.08); camDist = target < camDist ? target : lerp(camDist, target, Math.min(1, dt * 4));
   camPos.copy(P.pos).addScaledVector(_cb, camDist); camera.position.copy(camPos);
+  // on the comb, look down the wax at your own back, with the comb as the floor
+  if (P.mode === 'crawl' && camDist > 0.3) { camera.up.set(0, 0, 1); camera.lookAt(_cz.copy(P.pos).addScaledVector(P.cdir, 0.7)); camera.up.set(0, 1, 0); }
 }
 // ---------- golden-nectar raids: stay to fill up, but the wasps smell it ----------
 for (const w of wasps) if (w.raider || w.mob) { w.state = 'idle'; }
@@ -1731,7 +1819,7 @@ function openZone(id) {
   const Z = ZONES[id]; G.zones[id] = true; G.spent = (G.spent || 0) + Z.cost; if (id === 'garden') G.orchard = true;
   Z.draw(Z.name, 'scouted'); Z.wax.uniforms.uOn.value = 0; Z.glow.material.opacity = 0; Z.fadeT = 4;
   toast(`<b>Your sisters fly ahead to scout ${Z.lname}</b><br><span>${Z.cost} honey left at the stone. ${{ garden: 'The hedge winds settle.', pond: 'Lilies on the pads, but watch for dragonflies.', forest: 'Violets in the roots, foxgloves in the shade, webs between the trunks.' }[id]}</span>`, 7);
-  [0, 2, 4, 7, 9].forEach((n, i) => tone(SCALE[n], 0.1, 2.6, 'sine', i * 0.1));
+  [0, 2, 4, 7].forEach((n, i) => tone(SCALE[n], 0.1, 2.6, 'sine', i * 0.1)); tone(SCALE[2] * 2, 0.08, 2.6, 'sine', 0.4);
   _v.set(Z.x, Z.top + 2, Z.z); puff(_v, 40, [1.0, 0.8, 0.3], 4, 0.014, 2.2, -0.5, 1.2); save();
 }
 function updateZones(dt) {
@@ -1839,7 +1927,13 @@ function dayEnd(dt) {
   if (was < 7.5 && DAY.ending >= 7.5) { dayCard.style.opacity = 0; dayFade.style.opacity = 0; }
   if (DAY.ending >= 8.5) { DAY.ending = 0; P.mode = 'fly'; toast(`<b>Morning, day ${DAY.n}</b><br><span>the flowers are open and full again</span>`, 5); [0, 4, 7].forEach((n, i) => tone(SCALE[n], 0.08, 2.4, 'sine', i * 0.15)); }
 }
-function updateRound6(dt) { updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
+G.seenHome = false;
+function updateHome(dt) {
+  const dx = -P.pos.x, dz = -P.pos.z, L = Math.hypot(dx, dz) || 1; U.uHome.value.set(dx / L, 0, dz / L);
+  const tg = P.mode === 'fly' && !inHive ? (P.pollen > 0 ? 1 : 0.4) * smooth(45, 100, L) : 0; U.uHomeK.value += (tg - U.uHomeK.value) * Math.min(1, dt * 0.8);
+  if (!G.seenHome && P.pollen >= G.cap && L > 120) { G.seenHome = true; hint('bees read the light in the sky: a faint shimmer stands over home', 6); }
+}
+function updateRound6(dt) { updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
 applyDayLight();
 G.orchard = !!G.zones.garden;
 function beeCollide() {
@@ -1860,19 +1954,21 @@ function dwellSip(f, dt) {
 const WA = { on: false };
 function waspAudio() {
   if (!A.ctx || !A.master) return; const c = A.ctx;
-  if (!WA.on) {
-    WA.o1 = c.createOscillator(); WA.o1.type = 'sawtooth'; WA.o2 = c.createOscillator(); WA.o2.type = 'square';
-    WA.f = c.createBiquadFilter(); WA.f.type = 'bandpass'; WA.f.frequency.value = 1500; WA.f.Q.value = 1.1; WA.g = c.createGain(); WA.g.gain.value = 0;
-    WA.lfo = c.createOscillator(); WA.lfo.frequency.value = 27; WA.lg = c.createGain(); WA.lg.gain.value = 22; WA.lfo.connect(WA.lg); WA.lg.connect(WA.o1.frequency); WA.lg.connect(WA.o2.frequency);
-    WA.o1.connect(WA.f); WA.o2.connect(WA.f); WA.f.connect(WA.g); WA.p = c.createStereoPanner ? c.createStereoPanner() : null;
-    if (WA.p) { WA.g.connect(WA.p); WA.p.connect(A.master); } else WA.g.connect(A.master);
-    WA.o1.start(); WA.o2.start(); WA.lfo.start(); WA.on = true;
+  if (!WA.on) { // "hornet drone": two detuned saws and a sub-octave, distorted, with a rough wingbeat flutter
+    WA.o1 = c.createOscillator(); WA.o1.type = 'sawtooth'; WA.o2 = c.createOscillator(); WA.o2.type = 'sawtooth'; WA.sub = c.createOscillator(); WA.sub.type = 'triangle';
+    WA.mix = c.createGain(); WA.mix.gain.value = 0.5; WA.sh = c.createWaveShaper(); { const n = 1024, cv = new Float32Array(n); for (let i = 0; i < n; i++) cv[i] = Math.tanh((i / n * 2 - 1) * 3.5); WA.sh.curve = cv; }
+    WA.f = c.createBiquadFilter(); WA.f.type = 'lowpass'; WA.f.frequency.value = 1400; WA.f.Q.value = 2.5;
+    WA.trem = c.createGain(); WA.trem.gain.value = 0.75; WA.am = c.createOscillator(); WA.am.frequency.value = 118; WA.amg = c.createGain(); WA.amg.gain.value = 0.25; WA.am.connect(WA.amg); WA.amg.connect(WA.trem.gain);
+    WA.g = c.createGain(); WA.g.gain.value = 0; [WA.o1, WA.o2, WA.sub].forEach(o => o.connect(WA.mix)); WA.mix.connect(WA.sh); WA.sh.connect(WA.f); WA.f.connect(WA.trem); WA.trem.connect(WA.g);
+    WA.p = c.createStereoPanner ? c.createStereoPanner() : null; if (WA.p) { WA.g.connect(WA.p); WA.p.connect(A.master); } else WA.g.connect(A.master);
+    [WA.o1, WA.o2, WA.sub, WA.am].forEach(o => o.start()); WA.on = true;
   }
-  let best = null, bd = 1e9; for (const w of wasps) { if (w.state === 'idle') continue; const d = w.p.distanceTo(camera.position); if (d < bd) { bd = d; best = w; } }
-  const angry = best && (best.state === 'chase' || best.state === 'mob' || best.state === 'approach');
-  setG(WA.g.gain, best ? Math.pow(Math.max(0, 1 - bd / 90), 2) * (angry ? 0.11 : 0.045) : 0, 0.12);
+  let best = null, bd = 1e9; for (const w of wasps) { if (w.state === 'idle' || w.gone > 0) continue; const d = w.p.distanceTo(camera.position); if (d < bd) { bd = d; best = w; } }
+  const angry = best && (best.state === 'chase' || best.state === 'mob' || best.state === 'approach' || best.state === 'webbed'), near = best ? Math.max(0, 1 - bd / 90) : 0;
+  setG(WA.g.gain, best ? near * near * (angry ? 0.14 : 0.06) : 0, 0.12);
   if (best) { _v.copy(best.p).sub(camera.position); const L = Math.max(0.01, _v.length()); _v.multiplyScalar(1 / L); const closing = -_v.dot(_v2.copy(best.v).sub(P.vel));
-    const base = 340 + clamp(closing, -20, 30) * 4 + (angry ? 40 : 0); setG(WA.o1.frequency, base, 0.08); setG(WA.o2.frequency, base * 1.505, 0.08);
+    const base = 175 + clamp(closing, -20, 30) * 1.6 + (angry ? 25 : 0); setG(WA.o1.frequency, base, 0.08); setG(WA.o2.frequency, base * 1.012, 0.08); setG(WA.sub.frequency, base / 2, 0.08);
+    setG(WA.f.frequency, 900 + near * 1400 + (angry ? 600 : 0), 0.1);
     if (WA.p) { _v2.set(1, 0, 0).applyQuaternion(camera.quaternion); setG(WA.p.pan, clamp(_v.dot(_v2), -1, 1) * 0.9, 0.08); } }
 }
 function windHint() { if (camQuiet) return; if (time > G.windHintT) { G.windHintT = time + 7; toast(`<b>The hedge winds are too strong</b><br><span>leave 20 honey at the glowing stone by the gate (you have ${stores()} stored)</span>`, 4); } }
@@ -2160,4 +2256,4 @@ function updateTrails(dt) {
   trGeo.attributes.aA.needsUpdate = trGeo.attributes.position.needsUpdate = true;
 }
 
-window.__g = { weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+window.__g = { archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
