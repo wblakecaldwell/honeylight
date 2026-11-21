@@ -27,6 +27,17 @@
   @keyframes pulse{50%{opacity:.25}}
   #hint{position:fixed;left:0;right:0;bottom:7%;text-align:center;pointer-events:none;opacity:0;transition:opacity .9s;font-size:15px;letter-spacing:.06em;color:#fff3d6;text-shadow:0 1px 6px #000}
   #hint kbd{display:inline-block;min-width:1.5em;padding:.25em .5em;margin:0 .15em;border:1px solid rgba(255,235,190,.55);border-radius:6px;background:rgba(30,16,4,.45);font-family:inherit;font-size:14px}
+  #hud{position:fixed;left:18px;top:14px;pointer-events:none;opacity:0;transition:opacity 1s;font-size:15px;color:#fff3d6;text-shadow:0 1px 6px #000;line-height:1.55}
+  #hud b{font-size:20px;color:#ffd98a;font-weight:normal}
+  #hud .dim{opacity:.7;font-size:13px;font-style:italic}
+  #hud .warn{color:#ffb38a;font-size:14px;animation:pulse 0.8s infinite}
+  #hud .jar{display:inline-block;width:12px;height:14px;margin-right:7px;border-radius:3px 3px 5px 5px;background:linear-gradient(#ffd27a,#d98a12);box-shadow:0 0 8px rgba(255,180,40,.7);vertical-align:-1px}
+  #hud .pips i{display:inline-block;width:11px;height:11px;margin-right:5px;border-radius:50%;border:1px solid rgba(255,230,170,.6);background:rgba(30,16,4,.35)}
+  #hud .pips i.on{background:radial-gradient(circle at 35% 35%,#fff2b0,#f0a820);border-color:#ffe08a;box-shadow:0 0 6px rgba(255,190,60,.8)}
+  #hud .pips i.gold{background:radial-gradient(circle at 35% 35%,#ffffff,#ffcf3a);box-shadow:0 0 10px rgba(255,230,120,1)}
+  #toast{position:fixed;left:0;right:0;top:12%;text-align:center;pointer-events:none;opacity:0;transition:opacity .7s;font-size:20px;color:#fff3d6;text-shadow:0 1px 8px #000,0 0 20px rgba(0,0,0,.5);line-height:1.4}
+  #toast b{font-weight:normal;color:#ffd98a;font-size:24px}
+  #toast span{font-size:15px;font-style:italic;opacity:.85}
 </style>
 </head>
 <body>
@@ -36,6 +47,8 @@
 <div id="vig" class="ov"></div>
 <div id="black" class="ov"></div>
 <div id="hint"></div>
+<div id="hud"></div>
+<div id="toast"></div>
 <div id="title" class="ov"><h1>Honeylight</h1><p>a small life, beginning</p><div class="go">click to wake</div></div>
 <script type="module" src="./main.js"></script>
 </body>
