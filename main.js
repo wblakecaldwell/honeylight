@@ -1120,7 +1120,7 @@ try { P.honey = clamp(parseFloat(localStorage.getItem('honeylight.honey')) || 0,
 const keys = new Set(); let touchFwd = false, locked = false, dragging = false;
 const hintEl = $('hint'); let hintTimer = 0;
 function hint(html, secs = 6) { hintEl.innerHTML = html; hintEl.style.opacity = 1; clearTimeout(hintTimer); hintTimer = setTimeout(() => hintEl.style.opacity = 0, secs * 1000); }
-function look(dx, dy) { P.yaw -= dx * 0.0023; P.pitch = clamp(P.pitch - dy * 0.0023, -1.5, 1.5); P.yawRate -= dx * 0.0023; }
+function look(dx, dy) { P.yaw -= dx * 0.0023; P.pitch = clamp(P.pitch - dy * 0.0023, -1.56, 1.56); P.yawRate -= dx * 0.0023; }
 function action() {
   if (wriggle()) return;
   if (P.mode === 'cell') chew();
@@ -1241,7 +1241,7 @@ function update(dt) {
     if (!inHive) { const r = Math.hypot(P.pos.x, P.pos.z); if (r > 330) { acc.x -= P.pos.x / r * (r - 330) * 0.6; acc.z -= P.pos.z / r * (r - 330) * 0.6; } if (P.pos.y > 62) acc.y -= (P.pos.y - 62) * 1.5; }
     P.vel.addScaledVector(acc, dt); P.vel.multiplyScalar(Math.max(0, 1 - damp * dt));
     if (!inHive) { const hv = Math.hypot(P.vel.x, P.vel.z), fl = Math.hypot(fwd.x, fwd.z); if (hv > 4 && kf > 0 && fl > 0.2) { const k = Math.min(1, dt * 1.6 * outF); P.vel.x += (fwd.x / fl * hv - P.vel.x) * k; P.vel.z += (fwd.z / fl * hv - P.vel.z) * k; }
-      if (!ku) P.vel.y *= 1 - Math.min(1, dt * 1.2 * outF); }
+      if (!ku) P.vel.y *= 1 - Math.min(1, dt * 1.2 * outF * (kf > 0 ? 1 - Math.min(1, Math.abs(fwd.y) * 1.6) : 1)); }
     P.pos.addScaledVector(P.vel, dt);
     collide(P.pos, P.vel); beeCollide();
     P.landed = null;
