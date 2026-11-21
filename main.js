@@ -1010,7 +1010,7 @@ const wasps = [];
 {
   const mh = new V3(FDIR.x * (FIELD_D + 40) - FDIR.z * 35, 0, FDIR.z * (FIELD_D + 40) + FDIR.x * 35); mh.y = terrainH(mh.x, mh.z) + 14;
   wasps.push({ home: mh, R: 38, orchard: false });
-  wasps.push({ home: NEST.clone(), R: 30, orchard: true }, { home: NEST.clone(), R: 45, orchard: true }, { home: new V3(0, -500, 0), R: 0, raider: true }, { home: new V3(0, -500, 0), R: 0, raider: true });
+  wasps.push({ home: NEST.clone(), R: 8, orchard: true }, { home: NEST.clone(), R: 11, orchard: true }, { home: new V3(0, -500, 0), R: 0, raider: true }, { home: new V3(0, -500, 0), R: 0, raider: true });
   wasps.push({ home: new V3(0, -500, 0), R: 0, mob: true }, { home: new V3(0, -500, 0), R: 0, mob: true });
   { const H = HILLS[0]; wasps.push({ home: new V3(H.x, terrainH(H.x, H.z) + 26, H.z), R: 16, orchard: false, guard: true }); }
   for (const w of wasps) { w.p = w.home.clone(); w.v = new V3(); w.state = 'patrol'; w.t = 0; w.ph = srnd(TAU); w.q = new Q4(); w.fwd = new V3(1, 0, 0); w.buzzT = 0; }
@@ -1176,7 +1176,7 @@ function collide(p, v) {
   { const dx = p.x - ORCH.x, dz = p.z - ORCH.z, dO = Math.hypot(dx, dz);
     if (!G.orchard) { const lim = HEDGE_R + 6; if (dO < lim) { const k = lim / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; const vr = (v.x * dx + v.z * dz) / dO; if (vr < 0) { v.x -= vr * dx / dO * 1.6; v.z -= vr * dz / dO * 1.6; } windHint(); } }
     else if (Math.abs(dO - HEDGE_R) < 8.5 + PR && p.y < terrainH(p.x, p.z) + 37 && !inHedgeGap(Math.atan2(dz, dx)) && !(Math.abs(Math.atan2(Math.sin(Math.atan2(dz, dx) - HEDGE_TUN), Math.cos(Math.atan2(dz, dx) - HEDGE_TUN))) < 0.06 && p.y < terrainH(p.x, p.z) + 5.5)) { const t = HEDGE_R + (dO > HEDGE_R ? 1 : -1) * (8.5 + PR), k = t / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; } }
-  zoneWalls(p, v); forestCollide(p, v);
+  zoneWalls(p, v); forestCollide(p, v); nestCollide(p, v);
   for (const t of orchTrees) { const dx = p.x - t.x, dz = p.z - t.z, dh = Math.hypot(dx, dz); if (dh > t.cr * 1.6 + 3) continue;
     if (p.y < t.top - t.cr * 0.3 && dh < t.R + PR + 0.8) { const k = (t.R + PR + 0.8) / Math.max(dh, 0.01); p.x = t.x + dx * k; p.z = t.z + dz * k; }
     if (t.blobs) for (const b of t.blobs) { const bx = p.x - b[0], by = (p.y - b[1]) * b[3] / b[4], bz = p.z - b[2], dd = Math.hypot(bx, by, bz), rr = b[3] * 1.02 + PR; if (dd < rr) { const k = rr / Math.max(dd, 0.01); p.x = b[0] + bx * k; p.y = b[1] + by * k * b[4] / b[3]; p.z = b[2] + bz * k; v.multiplyScalar(0.7); } } }
@@ -1400,20 +1400,24 @@ function updateRich(dt) {
   }
 }
 // --- threats: wasps
-const _wm2 = new M4(), _wt = new M4(), _wr = new M4(), _wsc = new M4(), _wv = new V3();
+const _wm2 = new M4(), _wt = new M4(), _wr = new M4(), _wsc = new M4(), _wv = new V3(), _wp = new V3();
 function updateWasps(dt) {
   const flying = P.mode === 'fly' && !inHive;
   wasps.forEach((w, i) => {
     w.t += dt; w.buzzT -= dt;
     const d = w.p.distanceTo(P.pos), active = !w.orchard || G.orchard;
     let target, spd;
+    if (w.gone > 0) { w.gone -= dt; if (w.gone > 0) { hideWasp(i, w); return; } w.p.copy(w.home); w.p.y += 12; w.v.set(0, 0, 0); w.state = 'patrol'; w.t = 0; }
+    if (w.state === 'webbed') { w.webT -= dt; w.p.copy(w.webAt).addScaledVector(w.web.n, Math.sin(time * 40) * 0.08); w.p.x += Math.sin(time * 31) * 0.05;
+      if (w.webT <= 0) { eatWasp(w, 'web'); hideWasp(i, w); return; } target = w.p; spd = 0; }
     if (w.raider || w.mob) { const rr = w.mob ? mobUpdate(w, d, flying, dt) : raiderUpdate(w, d, flying, dt);
       if (rr === null) { w.p.set(0, -500, 0); _v2.set(0.001, 0.001, 0.001); _wm2.compose(w.p, w.q, _v2); waspMesh.setMatrixAt(i, _wm2); waspWings.setMatrixAt(i * 2, _wm2); waspWings.setMatrixAt(i * 2 + 1, _wm2); return; }
       if (rr) { target = rr[0]; spd = rr[1]; } }
     if (target) { }
     else if (w.state === 'patrol') {
       const a = time * 0.35 + w.ph; target = _wv.set(w.home.x + Math.cos(a) * w.R, w.home.y + Math.sin(time * 0.9 + w.ph) * 4, w.home.z + Math.sin(a * 1.3) * w.R); spd = 9;
-      if (active && flying && P.load.length > 0 && d < 34) { w.state = 'chase'; w.t = 0; sweep(300, 520, 0.35, 0.05, 'sawtooth'); if (!G.seenWasp) { G.seenWasp = true; toast('<b>A wasp wants your pollen!</b><br><span>heavy bees are slow: outrun it, or dive into the hive</span>', 6); } }
+      if (w.orchard && NESTR.out && w.out) { target = _wv.set(w.out.x + Math.cos(time * 0.6 + w.ph) * 9, w.out.y + Math.sin(time * 0.9 + w.ph) * 3, w.out.z + Math.sin(time * 0.7 + w.ph) * 9); spd = 10; }
+      if (active && flying && P.load.length > 0 && d < 34) { w.state = 'chase'; w.t = 0; sweep(300, 520, 0.35, 0.05, 'sawtooth'); if (!G.seenWasp) { G.seenWasp = true; toast('<b>A wasp wants your pollen!</b><br><span>heavy bees are slow: outrun it, dive into the hive, or lead it into a spider web</span>', 6); } }
     } else if (w.state === 'chase') {
       if (!w.decoy && d < 15 && tryDecoy(w)) { }
       if (w.decoy) { target = _wv.copy(w.decoy.p); spd = 21; if (w.t > 6) { w.state = 'retreat'; w.t = 0; w.decoy = null; } } else target = _wv.copy(P.pos); if (!w.decoy) spd = 23;
@@ -1429,7 +1433,7 @@ function updateWasps(dt) {
     if (!target) { target = w.p; spd = 0; }
     tmp.copy(target).sub(w.p); const L = tmp.length(); if (L > 0.01) tmp.multiplyScalar(Math.min(spd, L * 2) / L);
     w.v.lerp(tmp, Math.min(1, dt * (w.state === 'chase' ? 2.6 : 1.5)));
-    w.p.addScaledVector(w.v, dt); w.p.y += Math.sin(time * 7 + w.ph) * 0.02;
+    _wp.copy(w.p); w.p.addScaledVector(w.v, dt); waspWebCheck(w, _wp); w.p.y += Math.sin(time * 7 + w.ph) * 0.02;
     const gy = terrainH(w.p.x, w.p.z) + 2; if (w.p.y < gy) w.p.y = gy; if (spd === 0) w.v.set(0, 0, 0);
     if (w.v.lengthSq() > 0.5) w.fwd.lerp(_v.copy(w.v).normalize(), Math.min(1, dt * 6));
     orient(w.q, w.fwd, YA); _v2.set(1.75, 1.75, 1.75);
@@ -1752,7 +1756,12 @@ function updateDragonflies(dt) {
     d.t += dt; d.cd -= dt; const dist = d.p.distanceTo(pb);
     const near = P.mode === 'fly' && P.stuck <= 0 && Math.hypot(pb.x - POND.x, pb.z - POND.z) < POND.r + 16 && pb.y < WY + 24;
     let spd = 18, tgt = d.tgt;
-    if (d.state === 'patrol') {
+    if (d.state === 'patrol' && d.cd <= 0) { const prey = wasps.find(w => (w.state === 'chase' || w.state === 'webbed') && !(w.gone > 0) && w.p.y > -100 && Math.hypot(w.p.x - POND.x, w.p.z - POND.z) < POND.r + 30 && w.p.distanceTo(d.p) < 55 && !dragonflies.some(o => o.prey === w));
+      if (prey) { d.state = 'hunt'; d.prey = prey; d.t = 0; noiseHit(3000, 6, 0.05, 0.2); } }
+    if (d.state === 'hunt') { const w = d.prey; spd = 38; d.tgt.copy(w.p);
+      if (w.gone > 0 || w.p.y < -100 || w.state === 'idle' || d.t > 6) { d.state = 'patrol'; d.prey = null; d.next = 0; }
+      else if (d.p.distanceTo(w.p) < 2.6) { eatWasp(w, 'dragonfly'); d.prey = null; d.state = 'away'; d.t = 0; d.cd = 8; const a = rnd(TAU); d.tgt.set(POND.x + Math.cos(a) * POND.r * 0.5, WY + 7, POND.z + Math.sin(a) * POND.r * 0.5); } }
+    else if (d.state === 'patrol') {
       if (d.t > d.next) { d.next = d.t + rnd(0.9, 2.4); const a = rnd(TAU), r = rnd(4, POND.r - 8); d.tgt.set(POND.x + Math.cos(a) * r, WY + rnd(2.5, 9), POND.z + Math.sin(a) * r); }
       if (near && dist < 28 && d.cd <= 0 && !dragonflies.some(o => o !== d && o.state !== 'patrol' && o.state !== 'away')) { d.state = 'eye'; d.t = 0; noiseHit(3000, 6, 0.05, 0.25); }
     } else if (d.state === 'eye') {
@@ -1830,7 +1839,7 @@ function dayEnd(dt) {
   if (was < 7.5 && DAY.ending >= 7.5) { dayCard.style.opacity = 0; dayFade.style.opacity = 0; }
   if (DAY.ending >= 8.5) { DAY.ending = 0; P.mode = 'fly'; toast(`<b>Morning, day ${DAY.n}</b><br><span>the flowers are open and full again</span>`, 5); [0, 4, 7].forEach((n, i) => tone(SCALE[n], 0.08, 2.4, 'sine', i * 0.15)); }
 }
-function updateRound6(dt) { updateDay(dt); updateZones(dt); updateDragonflies(dt); }
+function updateRound6(dt) { updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
 applyDayLight();
 G.orchard = !!G.zones.garden;
 function beeCollide() {
@@ -1990,4 +1999,165 @@ function adaptRes(ms) {
 }
 
 requestAnimationFrame(frame);
-window.__g = { rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+// ---------- batch 1: nectar trails, the nest raid, luring wasps ----------
+function hideWasp(i, w) { w.p.set(0, -500, 0); _v2.set(0.001, 0.001, 0.001); _wm2.compose(w.p, w.q, _v2); waspMesh.setMatrixAt(i, _wm2); waspWings.setMatrixAt(i * 2, _wm2); waspWings.setMatrixAt(i * 2 + 1, _wm2); }
+G.revenge = 0; G.raids = 0; G.trails = 0;
+function eatWasp(w, by) {
+  const near = P.pos.distanceTo(w.p) < 120;
+  _v.copy(w.p); puff(_v, 22, [0.9, 0.85, 0.6], 3, 0.01, 1.0); puff(_v, 10, [1.0, 0.8, 0.2], 2, 0.012, 0.8);
+  if (w.raider) { w.state = 'idle'; w.away = null; } else { w.state = 'gone'; w.gone = rnd(45, 60); }
+  w.webbed = 0; w.decoy = null; G.revenge++;
+  if (near) { gainHoney(2); noiseHit(by === 'web' ? 2200 : 900, 2, 0.18, 0.3); [7, 4, 2].forEach((n, k) => tone(SCALE[n] * 0.5, 0.06, 0.8, 'triangle', k * 0.08));
+    toast(by === 'web' ? '<b>The spider got it!</b><br><span>one less wasp. +2 honey</span>' : '<b>Snatched!</b><br><span>a dragonfly ate the wasp. +2 honey</span>', 3); }
+}
+function waspWebCheck(w, prev) {
+  if (w.state !== 'chase' || w.decoy) return;
+  for (const wb of webs) {
+    if (wb.torn > 0 || P.stuckWeb === wb && P.stuck > 0) continue;
+    const d0 = _v.copy(prev).sub(wb.c).dot(wb.n), d1 = _v.copy(w.p).sub(wb.c).dot(wb.n);
+    if (!(d0 * d1 <= 0 || Math.abs(d1) < 0.9)) continue;
+    if (_v.addScaledVector(wb.n, -d1).length() > wb.r * 0.9) continue;
+    w.state = 'webbed'; w.webT = 4.5; w.web = wb; w.webAt = w.p.clone().addScaledVector(wb.n, -d1); w.v.set(0, 0, 0);
+    if (P.pos.distanceTo(w.p) < 90) { noiseHit(1800, 4, 0.16, 0.35); toast('<b>The wasp flew into a web!</b>', 2.5); if (!G.seenLure) { G.seenLure = true; hint('wasps chasing you can blunder into webs. Dragonflies hunt them too', 6); } }
+    return;
+  }
+}
+// --- the wasp nest: when its guards are out, slip under it and take the stolen honey back
+const NESTR = { out: false, t: 40, cd: 0, hold: 0, quiet: false, E: NEST.clone().add(new V3(0, -4.8, 0)) };
+const nestGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: richGlows[0].s.material.map, color: new THREE.Color(2.0, 1.3, 0.45), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+nestGlow.scale.set(5, 9, 1); nestGlow.center.set(0.5, 0.15); nestGlow.position.copy(NESTR.E); nestGlow.visible = false; scene.add(nestGlow);
+function nestGuards() { let n = 0; for (const w of wasps) if (w.orchard && !(w.gone > 0) && w.state !== 'webbed' && w.p.distanceTo(NEST) < 18) n++; return n; }
+function nestCollide(p, v) {
+  const a = 2.8 + PR, b = 3.8 + PR, dx = (p.x - NEST.x) / a, dy = (p.y - NEST.y) / b, dz = (p.z - NEST.z) / a, r = Math.hypot(dx, dy, dz);
+  if (r >= 1 || r < 1e-4) return; p.set(NEST.x + dx / r * a, NEST.y + dy / r * b, NEST.z + dz / r * a);
+  _v.set(dx, dy, dz).normalize(); const vn = v.dot(_v); if (vn < 0) v.addScaledVector(_v, -vn);
+}
+function updateNest(dt) {
+  if (!G.orchard) { nestGlow.visible = false; return; }
+  NESTR.t -= dt; NESTR.cd -= dt;
+  if (NESTR.t <= 0) { NESTR.out = !NESTR.out; NESTR.t = NESTR.out ? rnd(24, 32) : rnd(30, 45);
+    if (NESTR.out) for (const w of wasps) if (w.orchard) { const a = rnd(TAU), r = rnd(35, HEDGE_R - 22), x = ORCH.x + Math.cos(a) * r, z = ORCH.z + Math.sin(a) * r; w.out = new V3(x, terrainH(x, z) + rnd(8, 16), z); } }
+  const guards = nestGuards(), quiet = guards === 0 && NESTR.cd <= 0, dC = camera.position.distanceTo(NEST);
+  nestGlow.visible = dC < 260; nestGlow.material.opacity += ((quiet ? 0.55 + 0.15 * Math.sin(time * 3) : 0) - nestGlow.material.opacity) * Math.min(1, dt * 2);
+  if (quiet && dC < 160 && Math.random() < dt * 4) { _v.set(NEST.x + rnd(-0.8, 0.8), NEST.y - 3.6, NEST.z + rnd(-0.8, 0.8)); puff(_v, 1, [1.0, 0.65, 0.15], 0.2, 0.02, 1.6, 9); }
+  if (quiet && !NESTR.quiet && P.mode === 'fly' && P.pos.distanceTo(NEST) < 75) {
+    toast(G.raids ? '<b>The nest is unguarded again</b>' : '<b>The wasp nest is unguarded</b><br><span>it\'s full of honey they stole. Slip underneath and take it back</span>', G.raids ? 2.5 : 6); }
+  NESTR.quiet = quiet;
+  const dE = P.pos.distanceTo(NESTR.E);
+  if (P.mode === 'fly' && !inHive && dE < 3.8 && NESTR.cd <= 0) {
+    if (guards > 0) { NESTR.hold = 0; if (time > (NESTR.hintT || 0)) { NESTR.hintT = time + 5; toast('<b>Wasps are home</b><br><span>wait for them to fly out, or lead them away</span>', 3); } }
+    else { NESTR.hold += dt; if (Math.random() < dt * 8) { tone(SCALE[Math.min(7, Math.floor(NESTR.hold * 3))], 0.05, 0.5); puff(NESTR.E, 2, [1.0, 0.7, 0.2], 1, 0.014, 0.9, -1); }
+      if (NESTR.hold >= 2.2) raidNest(); }
+  } else NESTR.hold = Math.max(0, NESTR.hold - dt * 2);
+}
+function raidNest() {
+  NESTR.hold = 0; NESTR.cd = 180; G.raids++;
+  const give = Math.min(3, Math.max(0, G.cap - P.load.length)); for (let i = 0; i < give; i++) P.load.push(4); P.pollen = P.load.length;
+  gainHoney(6 + (3 - give) * 4);
+  puff(NESTR.E, 40, [1.0, 0.7, 0.2], 4, 0.016, 1.4, 3); [0, 2, 4, 7].forEach((n, k) => tone(SCALE[n], 0.1, 1.6, 'sine', k * 0.07));
+  sweep(260, 620, 0.6, 0.07, 'sawtooth'); noiseHit(500, 1, 0.2, 0.5, 'lowpass', 160);
+  for (const w of wasps) if (w.orchard && !(w.gone > 0)) { w.state = 'chase'; w.t = -8; w.decoy = null; }
+  toast(`<b>You took the honey back!</b><br><span>${give ? `${give} heavy balls of stolen honey. ` : ''}The nest is furious. Fly!</span>`, 4);
+}
+// --- nectar trails: a sweet scent drifts through a gap in the world. Follow it fast, before it fades behind you
+const TRAILN = 200, trPos = new Float32Array(TRAILN * 3), trA = new Float32Array(TRAILN), trS = new Float32Array(TRAILN);
+const trGeo = new THREE.BufferGeometry(); trGeo.setAttribute('position', new THREE.BufferAttribute(trPos, 3)); trGeo.setAttribute('aA', new THREE.BufferAttribute(trA, 1)); trGeo.setAttribute('aS', new THREE.BufferAttribute(trS, 1));
+const trPts = new THREE.Points(trGeo, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: `attribute float aA; attribute float aS; varying float vA; void main(){ vec4 mv=viewMatrix*vec4(position,1.0); vA=aA; gl_PointSize=clamp(aS*500.0/max(-mv.z,0.1),7.0,80.0); gl_Position=projectionMatrix*mv; }`,
+  fragmentShader: UNTONE + `varying float vA; void main(){ float d=length(gl_PointCoord-0.5); float core=smoothstep(0.22,0.0,d), halo=smoothstep(0.5,0.0,d); float a=core*1.4+halo*halo*0.6; gl_FragColor=vec4(untone(vec3(1.0,0.78,0.3))*2.4*a*vA,1.0); }` }));
+trPts.frustumCulled = false; trPts.visible = false; scene.add(trPts);
+const TRAIL = { state: 'off', pts: [], got: [], n: 0, f: null, front: 0, prog: -1, t: 0, next: rnd(25, 40), kind: '', fade: 1 };
+const SP = 2.2;
+function trailFlower(p, filt, maxD = 60) { let best = null, bd = maxD; for (const f of flowers) { if (f.inLog || f.rich > 0 || zoneLocked(f) || (filt && !filt(f))) continue; const d = Math.hypot(f.x - p.x, f.z - p.z); if (d < bd) { bd = d; best = f; } } return best; }
+const gp = (x, z, h) => new V3(x, terrainH(x, z) + h, z);
+function weave(trees, filt, maxGap) {
+  const near = trees.slice().sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z)).slice(0, 5);
+  let chain = [];
+  for (const cur of near) { const ch = [cur];
+    while (ch.length < 5) { let nb = null, nd = maxGap; const c = ch[ch.length - 1]; for (const t of trees) { if (ch.includes(t)) continue; const d = Math.hypot(t.x - c.x, t.z - c.z); if (d < nd && d > (t.R || 3) + (c.R || 3) + 4) { nd = d; nb = t; } } if (!nb) break; ch.push(nb); }
+    if (ch.length > chain.length) chain = ch; if (chain.length >= 5) break; }
+  if (chain.length < 4) return null; const way = [];
+  chain.forEach((t, i) => { const o = chain[Math.min(i + 1, chain.length - 1)], q = chain[Math.max(i - 1, 0)]; let dx = o.x - q.x, dz = o.z - q.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L; const s = i % 2 ? 1 : -1, off = (t.R || 3) + 3.4;
+    if (i === 0) way.push(gp(t.x - dx * 14, t.z - dz * 14, 5));
+    way.push(gp(t.x - dz * s * off, t.z + dx * s * off, 4.5 + (i % 2) * 1.5)); });
+  const last = way[way.length - 1], f = trailFlower(last, filt, 70); return f ? { way, f } : null;
+}
+function trailRoutes() {
+  const R = [];
+  { const A = LOG.axis, c = LOG.c, L = LOG.len, s = Math.sign((P.pos.x - c.x) * A.x + (P.pos.z - c.z) * A.z) || 1, way = [];
+    for (const u of [L / 2 + 16, L / 2 + 4, 0, -L / 2 - 4, -L / 2 - 14]) way.push(new V3(c.x + A.x * u * s, c.y - 0.6, c.z + A.z * u * s));
+    const e = way[4].clone().addScaledVector(A, -s * 12), f = trailFlower(e, f => !f.canopy); if (f) R.push({ kind: 'log', way, f }); }
+  { const ps = ARCHES.map(a => new V3(a.cx, a.gy - 0.5 + a.h * 0.42, a.cz)); if (Math.hypot(P.pos.x - ps[ps.length - 1].x, P.pos.z - ps[ps.length - 1].z) < Math.hypot(P.pos.x - ps[0].x, P.pos.z - ps[0].z)) ps.reverse();
+    const pre = ps[0].clone().addScaledVector(ps[0].clone().sub(ps[1]).setY(0).normalize(), 14), post = ps[ps.length - 1].clone().addScaledVector(ps[ps.length - 1].clone().sub(ps[ps.length - 2]).setY(0).normalize(), 10);
+    const f = trailFlower(post, f => !f.canopy); if (f) R.push({ kind: 'arches', way: [pre, ...ps, post], f }); }
+  if (G.orchard) {
+    let ga = HEDGE_GAPS[0], bd = 1e9; for (const g of HEDGE_GAPS) { const d = Math.hypot(P.pos.x - ORCH.x - Math.cos(g) * HEDGE_R, P.pos.z - ORCH.z - Math.sin(g) * HEDGE_R); if (d < bd) { bd = d; ga = g; } }
+    const way = [HEDGE_R + 30, HEDGE_R + 11, HEDGE_R, HEDGE_R - 11, HEDGE_R - 26].map(r => gp(ORCH.x + Math.cos(ga) * r, ORCH.z + Math.sin(ga) * r, 6));
+    const f = trailFlower(way[4], f => f.orch && !f.canopy && f.val >= 2, 80); if (f) R.push({ kind: 'hedge', way, f });
+    const w = weave(orchTrees.filter(t => !t.nest), f => f.orch && !f.canopy && f.val >= 2, 45); if (w) R.push({ kind: 'orchard', ...w });
+  }
+  if (G.zones.forest) { const w = weave(forestTrees, f => f.zone === 'forest', 40); if (w) R.push({ kind: 'forest', ...w }); }
+  if (G.zones.pond) { const lot = flowers.find(f => f.lily && f.val >= 3 && !(f.rich > 0));
+    if (lot) { let dx = P.pos.x - POND.x, dz = P.pos.z - POND.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+      const e = new V3(POND.x + dx * (POND.r + 10), 0, POND.z + dz * (POND.r + 10)); e.y = Math.max(terrainH(e.x, e.z), WY) + 3;
+      const lx = lot.x - e.x, lz = lot.z - e.z, LL = Math.hypot(lx, lz) || 1;
+      const pads = PADS0.map(p => ({ p, u: ((p.x - e.x) * lx + (p.z - e.z) * lz) / LL, side: Math.abs(((p.x - e.x) * lz - (p.z - e.z) * lx) / LL) })).filter(o => o.u > 6 && o.u < LL - 6 && o.side < 20).sort((a, b) => a.u - b.u).slice(0, 4);
+      R.push({ kind: 'pond', way: [e, ...pads.map(o => new V3(o.p.x, WY + 2.2, o.p.z))], f: lot }); } }
+  return R;
+}
+function startTrail(kind) {
+  let rs = trailRoutes(); if (kind) rs = rs.filter(r => r.kind === kind);
+  else rs = rs.filter(r => { const d = Math.hypot(r.way[0].x - P.pos.x, r.way[0].z - P.pos.z); return d > 18 && d < 120; });
+  if (!rs.length) return false;
+  rs.sort((a, b) => Math.hypot(a.way[0].x - P.pos.x, a.way[0].z - P.pos.z) - Math.hypot(b.way[0].x - P.pos.x, b.way[0].z - P.pos.z));
+  const r = kind ? rs[0] : rs[Math.min(rs.length - 1, Math.random() < 0.35 ? 1 : 0)], f = r.f;
+  const way = r.way.concat([new V3(f.x, f.y + 1.6, f.z)]);
+  for (const p of way) if (r.kind !== 'log') p.y = Math.max(p.y, Math.max(terrainH(p.x, p.z), overWater(p.x, p.z) ? WY : -1e9) + 1.6);
+  const curve = new THREE.CatmullRomCurve3(way, false, 'centripetal'), n = Math.min(TRAILN, Math.max(8, Math.floor(curve.getLength() / SP)));
+  TRAIL.pts = curve.getSpacedPoints(n - 1); TRAIL.n = TRAIL.pts.length; TRAIL.got = new Array(TRAIL.n).fill(false);
+  TRAIL.f = f; TRAIL.kind = r.kind; TRAIL.state = 'wait'; TRAIL.t = 0; TRAIL.front = -1e9; TRAIL.prog = -1; TRAIL.fade = 1; trPts.visible = true;
+  TRAIL.pts.forEach((p, i) => { trPos[i * 3] = p.x; trPos[i * 3 + 1] = p.y; trPos[i * 3 + 2] = p.z; trS[i] = i === 0 ? 1.4 : i === TRAIL.n - 1 ? 1.2 : 0.85; });
+  for (let i = TRAIL.n; i < TRAILN; i++) trA[i] = 0;
+  trGeo.attributes.position.needsUpdate = trGeo.attributes.aS.needsUpdate = true; trGeo.setDrawRange(0, TRAIL.n);
+  tone(SCALE[4], 0.05, 2.0); tone(SCALE[7], 0.035, 2.4, 'sine', 0.15);
+  toast(G.seenTrail ? '<b>A sweet scent on the breeze</b>' : '<b>A sweet scent drifts on the breeze</b><br><span>follow the golden motes fast, before the scent fades behind you</span>', G.seenTrail ? 2.5 : 6); G.seenTrail = true;
+  return true;
+}
+function endTrail(ok) {
+  TRAIL.state = 'fade'; TRAIL.next = rnd(40, 70);
+  if (ok) { const f = TRAIL.f; f.rich = f.rich0 = 30; f.cool = 0; let slot = richGlows.find(g => g.f === f) || richGlows.find(g => !g.f);
+    if (!slot) { slot = richGlows[0]; slot.f.rich = 0; slot.f.raid = false; } slot.f = f; G.trails++; gainHoney(2);
+    [0, 2, 4, 5, 7].forEach((n, k) => tone(SCALE[n], 0.09, 1.8, 'sine', k * 0.08)); _v.set(f.sx, f.y + 1.2, f.sz); puff(_v, 30, [1.0, 0.85, 0.35], 3, 0.014, 1.6, -0.3, 0.6);
+    toast('<b>You followed the scent to a brimming flower!</b><br><span>+2 honey, and it\'s overflowing with nectar</span>', 3.5); }
+  else if (P.pos.distanceTo(TRAIL.pts[Math.max(0, TRAIL.prog)]) < 80) toast('<b>The scent faded</b>', 2);
+}
+function updateTrails(dt) {
+  const flying = P.mode === 'fly' && !inHive;
+  if (TRAIL.state === 'off') { trPts.visible = false; if (flying && outF > 0.8 && DAY.t < 0.86 && !flowersClosed()) { TRAIL.next -= dt; if (TRAIL.next <= 0) { if (!startTrail()) TRAIL.next = 6; } } return; }
+  TRAIL.t += dt; const pts = TRAIL.pts, n = TRAIL.n;
+  if (TRAIL.state === 'wait') {
+    if (TRAIL.t > 35) endTrail(false);
+    else if (flying) for (let i = 0; i < Math.min(10, n); i++) if (P.pos.distanceTo(pts[i]) < 3.4) { TRAIL.state = 'run'; TRAIL.prog = i; TRAIL.front = i - 1.4 * 16 / SP; break; }
+  }
+  if (TRAIL.state === 'run') {
+    TRAIL.front += dt * 16 / SP;
+    if (flying) for (let i = Math.max(0, TRAIL.prog - 3); i < Math.min(n, TRAIL.prog + 8); i++) {
+      if (TRAIL.got[i] || P.pos.distanceTo(pts[i]) > 3.4) continue;
+      TRAIL.got[i] = true; if (i > TRAIL.prog) TRAIL.prog = i; G.boost = Math.max(G.boost, 0.9);
+      if (i % 2 === 0) tone(SCALE[Math.min(7, Math.floor(8 * i / n))] * (i > n * 0.5 ? 1 : 0.5), 0.035, 0.5, 'sine');
+      puff(pts[i], 3, [1.0, 0.85, 0.4], 1.2, 0.008, 0.6);
+    }
+    const f = TRAIL.f; _v.set(f.sx, f.y + 1.2, f.sz);
+    if (TRAIL.prog >= n - 2 || (flying && P.pos.distanceTo(_v) < 3.6 && TRAIL.prog > n * 0.6)) endTrail(true);
+    else if (TRAIL.front > TRAIL.prog + 0.5 || !flying) endTrail(false);
+  }
+  if (TRAIL.state === 'fade') { TRAIL.fade -= dt * 1.2; if (TRAIL.fade <= 0) { TRAIL.state = 'off'; trPts.visible = false; return; } }
+  for (let i = 0; i < n; i++) {
+    let a = TRAIL.got[i] ? 0 : (0.6 + 0.4 * Math.sin(time * 5 + i * 0.9)) * clamp((i - TRAIL.front) / 3, 0, 1) * TRAIL.fade;
+    if (TRAIL.state === 'wait') a *= Math.min(1, TRAIL.t * 1.5);
+    trA[i] = a; const p = pts[i]; trPos[i * 3] = p.x + Math.sin(time * 1.3 + i) * 0.12; trPos[i * 3 + 1] = p.y + Math.sin(time * 1.7 + i * 1.3) * 0.15; trPos[i * 3 + 2] = p.z + Math.cos(time * 1.1 + i) * 0.12;
+  }
+  trGeo.attributes.aA.needsUpdate = trGeo.attributes.position.needsUpdate = true;
+}
+
+window.__g = { weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
