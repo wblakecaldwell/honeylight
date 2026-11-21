@@ -1,0 +1,6 @@
+# Local working copies and screenshots (not part of the game)
+backup/
+*-shots/
+look-previews/
+
+.DS_Store
