@@ -333,12 +333,12 @@ const BEE_VERT = VERT.replace('void main(){', 'uniform float uTime; attribute ve
   isLeg=step(abs(color.r-0.05),0.004)*step(abs(color.g-0.03),0.004)*step(abs(color.b-0.02),0.003);
   #endif
   float reach=clamp((abs(pp.x)-0.06)/0.3,0.0,1.0); float ph=aMove.z, fl=aMove.w;
-  float wig=sin(uTime*(5.0+fl*5.0)+ph+pp.z*7.0+sign(pp.x)*1.9);
+  float wig=0.0;
   pp.z-=isLeg*reach*(aMove.x*0.24+wig*0.04*(0.5+fl));
-  pp.x+=isLeg*reach*aMove.y*0.17*(1.0+0.3*sign(pp.x));
-  pp.y-=isLeg*reach*fl*(0.08+0.035*wig);
+  pp.x+=isLeg*(reach+clamp(-pp.y*2.0,0.0,1.0))*aMove.y*0.2;
+  pp.y-=isLeg*reach*fl*0.11;
   float abd=smoothstep(-0.1,-0.45,pp.z)*(1.0-isLeg);
-  pp.y+=abd*(sin(uTime*3.1+ph)*0.07*(0.3+fl)-aMove.x*0.08)*(-pp.z);
+  pp.y+=abd*(sin(uTime*2.2+ph)*0.03*(0.3+fl)-aMove.x*0.06)*(-pp.z);
   pp.x+=abd*aMove.y*0.10*(-pp.z);
   float head=smoothstep(0.24,0.34,pp.z)*(1.0-isLeg);
   pp.x+=head*aMove.y*0.05; pp.y+=head*(sin(uTime*1.7+ph)*0.012-aMove.x*0.02);
@@ -457,7 +457,7 @@ function updateBees(dt, t) {
     if (!b.lp) { b.lp = b.p.clone(); b.mx = 0; b.my = 0; }
     if (dt > 0) { if (b.vel) _v.copy(b.vel); else _v.copy(b.p).sub(b.lp).multiplyScalar(1 / dt); b.lp.copy(b.p); _q.copy(b.q).invert(); _v.applyQuaternion(_q);
       b.ax = b.ax === undefined ? 0 : b.ax; const fz = clamp(_v.z * 0.05, -0.8, 1.4); b.mx = lerp(b.mx, fz + (fz - (b.pz || 0)) * 0.0, Math.min(1, dt * 4)); b.pz = fz;
-      b.my = lerp(b.my, b.bank !== undefined ? b.bank : clamp(-_v.x * 0.08, -1, 1), Math.min(1, dt * 5)); }
+      b.my = lerp(b.my, b.bank !== undefined ? b.bank : clamp(-_v.x * 0.08, -1, 1), Math.min(1, dt * 3)); }
     beeMove[i * 4] = b.mx; beeMove[i * 4 + 1] = b.my; beeMove[i * 4 + 2] = b.ph * 7; beeMove[i * 4 + 3] = b.fly ? 1 : 0;
     _bm.compose(b.p, b.q, b.s); beeMesh.setMatrixAt(i, _bm);
     for (let s = 0; s < 2; s++) {
@@ -800,14 +800,39 @@ const webs = [];
 // wasps: slimmer, brighter, meaner-looking cousins of the bees
 const waspMat = new THREE.ShaderMaterial({ uniforms: beeMat.uniforms, vertexShader: beeMat.vertexShader, vertexColors: true,
   fragmentShader: beeMat.fragmentShader.replace('vec3(0.60,0.30,0.05)*(0.8+0.4*fz)', 'vec3(1.05,0.78,0.02)*(0.85+0.3*fz)').replace('sin(t*17.0+0.6)', 'sin(t*23.0+0.6)').replace('vec3 alb=vC*(0.8+0.45*fz);', 'vec3 alb=vC*(0.8+0.45*fz)*vec3(0.5,0.45,0.3);') });
-const WASPN = 6;
-const waspMesh = new THREE.InstancedMesh(beeGeo, waspMat, WASPN); waspMesh.frustumCulled = false; scene.add(waspMesh);
+// wasps: slim, glossy, bright yellow and deep black, narrow waist, long legs
+const waspGeo = (() => {
+  const blk = [0.02, 0.018, 0.015], face = [0.85, 0.68, 0.0], abd = [1.0, 0.8, 0.0], leg = [0.8, 0.6, 0.04];
+  const parts = [
+    { g: ell(0.13, 0.13, 0.11, 0, 0.02, 0.43, 14), c: face },
+    { g: ell(0.06, 0.095, 0.07, 0.095, 0.045, 0.43, 10), c: blk }, { g: ell(0.06, 0.095, 0.07, -0.095, 0.045, 0.43, 10), c: blk },
+    { g: ell(0.14, 0.14, 0.2, 0, 0.03, 0.18, 16), c: blk },
+    { g: ell(0.035, 0.035, 0.09, 0, 0.0, -0.06, 8), c: blk },
+    { g: ell(0.16, 0.15, 0.4, 0, -0.03, -0.5, 18), c: abd },
+  ];
+  for (const s of [1, -1]) {
+    parts.push({ g: stick([s * 0.04, 0.1, 0.5], [s * 0.12, 0.26, 0.62], 0.01), c: blk }, { g: stick([s * 0.12, 0.26, 0.62], [s * 0.2, 0.22, 0.82], 0.008), c: blk });
+    for (const [z0, z1] of [[0.26, 0.5], [0.16, 0.14], [0.06, -0.35]]) {
+      parts.push({ g: stick([s * 0.09, -0.08, z0], [s * 0.32, -0.05, (z0 + z1) / 2], 0.011), c: leg }, { g: stick([s * 0.32, -0.05, (z0 + z1) / 2], [s * 0.4, -0.42, z1], 0.008), c: leg });
+    }
+  }
+  return geoParts(parts);
+})();
+const waspMat2 = mat(`void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW);
+  vec3 alb=vC;
+  if(vC.r>0.95 && vC.b<0.02){ float t=vL.z; float band=smoothstep(0.42,0.5,fract(t*5.2+0.15))*(1.0-smoothstep(0.92,1.0,fract(t*5.2+0.15))); alb=mix(vec3(1.15,0.86,0.0),vec3(0.008,0.006,0.004),band); alb=mix(alb,vec3(0.01),smoothstep(-0.12,-0.05,vL.z)); }
+  float rimv=pow(1.0-max(dot(n,V),0.0),3.0);
+  vec3 c=shade(alb,n,vW,1.1,0.1)+vec3(0.9,0.8,0.5)*rimv*0.15;
+  gl_FragColor=vec4(finish(c,vW),1.0); }`, { vertexColors: true });
+const WASPN = 8;
+const waspMesh = new THREE.InstancedMesh(waspGeo, waspMat2, WASPN); waspMesh.frustumCulled = false; scene.add(waspMesh);
 const waspWings = new THREE.InstancedMesh(wingGeo, wingMat, WASPN * 2); waspWings.frustumCulled = false; scene.add(waspWings);
 const wasps = [];
 {
   const mh = new V3(FDIR.x * (FIELD_D + 40) - FDIR.z * 35, 0, FDIR.z * (FIELD_D + 40) + FDIR.x * 35); mh.y = terrainH(mh.x, mh.z) + 14;
   wasps.push({ home: mh, R: 38, orchard: false });
   wasps.push({ home: NEST.clone(), R: 30, orchard: true }, { home: NEST.clone(), R: 45, orchard: true }, { home: new V3(0, -500, 0), R: 0, raider: true }, { home: new V3(0, -500, 0), R: 0, raider: true });
+  wasps.push({ home: new V3(0, -500, 0), R: 0, mob: true }, { home: new V3(0, -500, 0), R: 0, mob: true });
   { const H = HILLS[0]; wasps.push({ home: new V3(H.x, terrainH(H.x, H.z) + 26, H.z), R: 16, orchard: false, guard: true }); }
   for (const w of wasps) { w.p = w.home.clone(); w.v = new V3(); w.state = 'patrol'; w.t = 0; w.ph = srnd(TAU); w.q = new Q4(); w.fwd = new V3(1, 0, 0); w.buzzT = 0; }
 }
@@ -1031,7 +1056,7 @@ function update(dt) {
     acc.set(0, 0, 0).addScaledVector(fwd, kf).addScaledVector(right, ks * 0.8); acc.y += ku * 0.8; thrust = Math.min(1, acc.length());
     acc.multiplyScalar(maxS * damp); if (ku > 0) acc.y *= 1 - P.wet * 0.6;
     acc.y -= P.wet * 9 + P.pollen * 0.6 * G.weight * outF;
-    G.kf = kf; G.ku = ku; airForces(acc, dt); summitForces(acc, dt);
+    G.kf = kf; G.ku = ku; abilities(dt); airForces(acc, dt); summitForces(acc, dt);
     if (P.pollen > 0) { acc.x += Math.sin(time * 2.3) * P.pollen * 0.5; acc.y += Math.sin(time * 3.1) * P.pollen * 0.45; }
     if (!inHive) { const r = Math.hypot(P.pos.x, P.pos.z); if (r > 330) { acc.x -= P.pos.x / r * (r - 330) * 0.6; acc.z -= P.pos.z / r * (r - 330) * 0.6; } if (P.pos.y > 62) acc.y -= (P.pos.y - 62) * 1.5; }
     P.vel.addScaledVector(acc, dt); P.vel.multiplyScalar(Math.max(0, 1 - damp * dt));
@@ -1042,7 +1067,7 @@ function update(dt) {
     P.landed = null;
     if (!inHive) {
       for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (flowerHit(f, d, dt)) {
-        if (f.rich > 0 && !(f.orch && !G.orchard)) richSip(f, dt); else if (f.giant) { if (f.cool <= 0 && P.pollen < G.cap) giantSip(f, dt); } else
+        if (f.rich > 0 && !(f.orch && !G.orchard)) richSip(f, dt); else if (f.giant) { if (f.cool <= 0 && P.pollen < G.cap) giantSip(f, dt); } else if (f.val >= 2) { if (f.cool <= 0 && P.pollen < G.cap && !(f.orch && !G.orchard)) dwellSip(f, dt); } else
         if (f.cool <= 0 && P.pollen < G.cap && !(f.orch && !G.orchard)) { f.cool = f.val >= 3 ? 70 : 25; addPollen(f); tone(SCALE[Math.min(7, P.pollen - 1)], 0.13, 2.2); _v.set(f.x, f.y + 0.6, f.z); puff(_v, 26, [1.0, 0.82, 0.25], 2.2, 0.012, 1.8, 0.6, 0.8); } } if (f.cool > 0) f.cool -= dt; }
       for (const s of shrooms) { tmp.set(P.pos.x - s.x, (P.pos.y - s.y) / 0.7, P.pos.z - s.z); const d = tmp.length(); if (d < s.R + 0.45 && tmp.y > -0.2) { tmp.normalize(); P.pos.set(s.x + tmp.x * (s.R + 0.45), s.y + tmp.y * (s.R + 0.45) * 0.7, s.z + tmp.z * (s.R + 0.45)); P.vel.addScaledVector(tmp, 17); P.vel.y += 6; s.sq = 1; sweep(170, 420, 0.25, 0.12); sweep(420, 260, 0.5, 0.06); } s.sq = Math.max(0, s.sq - dt * 2.5); const k = 1 - Math.sin(s.sq * Math.PI) * 0.25 * s.sq; s.mesh.scale.set(s.R * (2 - k), s.R * 0.7 * k, s.R * (2 - k)); }
       // water
@@ -1108,7 +1133,7 @@ function update(dt) {
   beacon.material.opacity = lerp(beacon.material.opacity, inHive ? 0 : 0.12 + P.pollen * 0.1, Math.min(1, dt));
   fish.userData.tail.rotation.y = Math.sin(time * (P.mode === 'gulp' ? 9 : 3)) * 0.45;
 
-  updateWind(dt); updateAirLife(dt); updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateWorld(dt); updateParts(dt); updateHud(dt);
+  updateWind(dt); updateAirLife(dt); updateRound5(dt); updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateWorld(dt); updateParts(dt); updateHud(dt);
 
   // overlays
   ui.water.style.opacity = camPos.y < WY && !inHive ? 0.62 : 0; ui.drops.style.opacity = P.wet * 0.9; ui.black.style.opacity = black;
@@ -1171,7 +1196,7 @@ function updateHud(dt) {
   let pips = ''; for (let i = 0; i < G.cap; i++) pips += i < P.load.length ? `<i class="on${P.load[i] > 1 ? ' gold' : ''}"></i>` : '<i></i>';
   const nu = nextUnlock(), chasing = wasps.some(w => w.state === 'chase'), coming = !chasing && wasps.some(w => w.state === 'approach' && w.t > 0 && w.p.distanceTo(P.pos) < 70);
   const html = `<div class="row"><span class="jar"></span><b>${G.honey}</b> honey <span class="dim">· ${G.workers} sister${G.workers === 1 ? '' : 's'} foraging${G.escorts ? ` · ${G.escorts} flying with you` : ''}</span></div><div class="row pips">${pips}</div>` +
-    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : coming ? '<div class="row warn">wasps are coming...</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '') + (G.holdT > 0.2 && time - (G.holdF ? G.holdF.lastLand : 0) < 0.3 ? `<div class="row warn">hold on... ${'●'.repeat(Math.ceil(G.holdT / 0.7))}</div>` : '') + (GIANT && GIANT.cool > 0 && Math.hypot(P.pos.x - GIANT.x, P.pos.z - GIANT.z) < 30 ? '<div class="row dim">the great sunflower is refilling</div>' : '');
+    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : coming ? '<div class="row warn">wasps are coming...</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '') + (G.holdT > 0.2 && time - (G.holdF ? G.holdF.lastLand : 0) < 0.3 ? `<div class="row warn">hold on... ${'●'.repeat(Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4)))}</div>` : '') + (G.dart || G.leap ? `<div class="row dim">${G.dart ? `<kbd>Q</kbd> dart ${G.dartCD <= 0 ? '●' : '○'}` : ''}${G.leap ? ` &nbsp; <kbd>E</kbd> leap ${G.leapCD <= 0 ? '●' : '○'}` : ''}</div>` : '') + (MOB.active && P.pos.distanceTo(MOB.anchor) > 12 ? '<div class="row warn">a sister needs help: follow the red glow</div>' : '') + (GIANT && GIANT.cool > 0 && Math.hypot(P.pos.x - GIANT.x, P.pos.z - GIANT.z) < 30 ? '<div class="row dim">the great sunflower is refilling</div>' : '');
   if (html !== hudCache) { hud.innerHTML = html; hudCache = html; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) toastEl.style.opacity = 0; }
 }
@@ -1202,7 +1227,7 @@ function updateWasps(dt) {
     w.t += dt; w.buzzT -= dt;
     const d = w.p.distanceTo(P.pos), active = !w.orchard || G.orchard;
     let target, spd;
-    if (w.raider) { const rr = raiderUpdate(w, d, flying, dt);
+    if (w.raider || w.mob) { const rr = w.mob ? mobUpdate(w, d, flying, dt) : raiderUpdate(w, d, flying, dt);
       if (rr === null) { w.p.set(0, -500, 0); _v2.set(0.001, 0.001, 0.001); _wm2.compose(w.p, w.q, _v2); waspMesh.setMatrixAt(i, _wm2); waspWings.setMatrixAt(i * 2, _wm2); waspWings.setMatrixAt(i * 2 + 1, _wm2); return; }
       if (rr) { target = rr[0]; spd = rr[1]; } }
     if (target) { }
@@ -1219,14 +1244,15 @@ function updateWasps(dt) {
         w.state = 'retreat'; w.t = 0;
       } else if (!w.decoy && (w.t > 11 || d > 75 || !flying || P.load.length === 0)) { w.state = 'retreat'; w.t = 0; }
       if (w.raider) spd = 21;
-      if (w.buzzT <= 0 && d < 30) { w.buzzT = 0.28; sweep(rnd(230, 260), rnd(280, 320), 0.22, 0.035 * (1 - d / 30) + 0.01, 'sawtooth'); }
+
     } else if (w.state === 'retreat') { target = w.home; spd = 14; if (w.t > 7) { w.state = 'patrol'; w.t = 0; } }
+    if (!target) { target = w.p; spd = 0; }
     tmp.copy(target).sub(w.p); const L = tmp.length(); if (L > 0.01) tmp.multiplyScalar(Math.min(spd, L * 2) / L);
     w.v.lerp(tmp, Math.min(1, dt * (w.state === 'chase' ? 2.6 : 1.5)));
     w.p.addScaledVector(w.v, dt); w.p.y += Math.sin(time * 7 + w.ph) * 0.02;
     const gy = terrainH(w.p.x, w.p.z) + 2; if (w.p.y < gy) w.p.y = gy; if (spd === 0) w.v.set(0, 0, 0);
     if (w.v.lengthSq() > 0.5) w.fwd.lerp(_v.copy(w.v).normalize(), Math.min(1, dt * 6));
-    orient(w.q, w.fwd, YA); _v2.set(1.8, 1.6, 2.4);
+    orient(w.q, w.fwd, YA); _v2.set(1.75, 1.75, 1.75);
     _wm2.compose(w.p, w.q, _v2); waspMesh.setMatrixAt(i, _wm2);
     for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1, flap = Math.sin(time * 230 + i * 3) * 0.85 + 0.15;
       _wt.makeTranslation(sg * 0.09, 0.19, 0.16); _wr.makeRotationZ(sg * flap); _wt.multiply(_wr); _wr.makeRotationY(sg * 0.3); _wt.multiply(_wr); _wsc.makeScale(sg * 1.0, 1, 1.0); _wt.multiply(_wsc);
@@ -1336,7 +1362,7 @@ try { G.third = localStorage.getItem('honeylight.view') === '3'; } catch (e) { G
 const me = newBee(1); me.s.set(0.001, 0.001, 0.001);
 const _yflip = new Q4().setFromAxisAngle(YA, Math.PI);
 const _meE = new THREE.Euler(0, 0, 0, 'YXZ');
-me.update = () => { const on = G.third && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6, P.yaw, P.roll * 1.3)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.2 + P.yawRate * 3, -1.2, 1.2); me.fly = P.mode === 'fly'; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
+me.update = () => { const on = G.third && camDist > 0.7 && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6, P.yaw, P.roll * 1.3)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.6, -1.2, 1.2); me.fly = P.mode === 'fly'; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
 addEventListener('keydown', e => { if (e.code === 'KeyV' && !e.repeat) { G.third = !G.third; try { localStorage.setItem('honeylight.view', G.third ? '3' : '1'); } catch (er) { } hint(G.third ? 'view from behind &nbsp; <kbd>V</kbd> to switch back' : 'bee\'s-eye view', 2.5); } });
 const _cp = new V3(), _cb = new V3(), _cd = new V3(), _cz = new V3();
 let camQuiet = false, camDist = 0;
@@ -1344,20 +1370,19 @@ function camBlocked(pt) { _cz.copy(pt); camQuiet = true; collide(_cz, _cd.set(0,
   for (const f of flowers) { const d = Math.hypot(pt.x - f.sx, pt.z - f.sz); if (d < f.r * 0.75 + f.len * 0.85 + 0.2 && pt.y < f.y + bloomH(f, d) + 0.25 && pt.y > f.y - 1.6) return true; } return false; }
 function thirdPerson(dt) {
   if (!G.third || P.mode === 'title' || P.mode === 'cell' || P.mode === 'emerge' || P.mode === 'gulp') { camDist = 0; return; }
-  const want = inHive ? 1.7 : 3.4, up = inHive ? 0.45 : 0.9;
+  const want = inHive ? 1.7 : 3.2, up = inHive ? 0.3 : 0.38;
   _cb.set(0, up, want).applyQuaternion(camera.quaternion); // behind and a little above, in view space
   // pull in if something solid is between the bee and the camera
   let ok = 0; const N = 10; for (let i = 1; i <= N; i++) { _cp.copy(P.pos).addScaledVector(_cb, i / N); if (camBlocked(_cp)) break; ok = i / N; }
   const target = Math.max(0.0, ok - 0.08); camDist = target < camDist ? target : lerp(camDist, target, Math.min(1, dt * 4));
   camPos.copy(P.pos).addScaledVector(_cb, camDist); camera.position.copy(camPos);
-  if (camDist > 0.3) { _cd.set(0, 0, -9).applyQuaternion(camera.quaternion).add(P.pos); camera.up.set(0, 1, 0); camera.lookAt(_cd); camera.rotateZ(P.roll * 0.7); }
 }
 // ---------- golden-nectar raids: stay to fill up, but the wasps smell it ----------
-for (const w of wasps) if (w.raider) { w.state = 'idle'; }
-function summonRaid(f) {
+for (const w of wasps) if (w.raider || w.mob) { w.state = 'idle'; }
+function summonRaid(f, lim = 2) {
   let n = 0;
   for (const w of wasps) { if (!w.raider || w.state !== 'idle') continue; const a = rnd(TAU), r = rnd(65, 85);
-    w.p.set(f.sx + Math.cos(a) * r, f.y + rnd(8, 16), f.sz + Math.sin(a) * r); w.v.set(0, 0, 0); w.state = 'approach'; w.t = -n * 2.5; w.target = f; n++; if (n >= 2) break; }
+    w.p.set(f.sx + Math.cos(a) * r, f.y + rnd(8, 16), f.sz + Math.sin(a) * r); w.v.set(0, 0, 0); w.state = 'approach'; w.t = -n * 2.5; w.target = f; n++; if (n >= lim) break; }
 }
 function richSip(f, dt) {
   if (!f.raid) { f.raid = true; f.sip = 0.5; summonRaid(f); toast('<b>The golden nectar is flowing</b><br><span>stay to fill your baskets, but wasps can smell it</span>', 4); sweep(200, 240, 1.2, 0.02, 'sawtooth'); }
@@ -1370,15 +1395,15 @@ function raiderUpdate(w, d, flying, dt) {
   if (w.state === 'approach') {
     const f = w.target; if (w.t < 0) return [w.p, 0];
     _wv.set(f.sx + Math.cos(time * 1.4 + w.ph) * 5, f.y + 2.5 + Math.sin(time * 2 + w.ph), f.sz + Math.sin(time * 1.4 + w.ph) * 5);
-    if (w.buzzT <= 0 && d < 70) { w.buzzT = 0.35; sweep(rnd(220, 250), rnd(270, 300), 0.3, 0.012 + 0.04 * (1 - d / 70), 'sawtooth'); }
+
     if (flying && P.load.length > 0 && d < 16) { w.state = 'chase'; w.t = 0; sweep(300, 520, 0.35, 0.05, 'sawtooth'); }
     else if (w.t > 16 || !(f.rich > 0)) { w.state = 'retreat'; w.t = 0; }
     return [_wv, 15];
   }
   if (w.state === 'retreat') {
     if (!w.away) { w.away = w.p.clone().add(_v.copy(w.p).sub(P.pos).setY(0).normalize().multiplyScalar(90)); w.away.y += 35; }
-    if (w.t > 6) { w.state = 'idle'; w.away = null; }
-    return [w.away, 16];
+    const tgt = w.away; if (w.t > 6) { w.state = 'idle'; w.away = null; }
+    return [tgt, 16];
   }
   return undefined; // chase handled by the normal code
 }
@@ -1397,7 +1422,7 @@ function giantSip(f, dt) {
   // the great sunflower makes you hold on for a few seconds while the summit winds try to blow you off
   if (time - (f.lastLand || -9) > 0.25) G.holdT = 0; f.lastLand = time; G.holdT += dt; G.holdF = f;
   if (Math.random() < dt * 6) { _v.set(f.sx + rnd(-1, 1), f.y + 1.2, f.sz + rnd(-1, 1)); puff(_v, 2, [1.0, 0.85, 0.3], 0.8, 0.01, 0.8, 0.3, 0.6); }
-  if (G.holdT >= 2.8) { G.holdT = 0; f.cool = 150; addPollen(f); }
+  G.holdNeed = 2.8; if (G.holdT >= 2.8) { G.holdT = 0; f.cool = 150; addPollen(f); }
 }
 // ---------- sisters who fly with you and draw wasps away ----------
 G.escorts = G.escorts || 0;
@@ -1421,6 +1446,106 @@ function tryDecoy(w) {
   e.state = 'decoy'; e.t = 0; _v.copy(w.p).sub(P.pos).setY(0); if (_v.lengthSq() < 0.01) _v.set(1, 0, 0); _v.normalize();
   e.away.copy(P.pos).addScaledVector(_v, -0).add(new V3(-_v.z, 0.4, _v.x).multiplyScalar(60 * (Math.random() < 0.5 ? 1 : -1))); e.away.y = Math.max(e.away.y, terrainH(e.away.x, e.away.z) + 10);
   w.decoy = e; w.t = 0; toast('<b>Your sister draws the wasp away!</b>', 3); tone(880, 0.08, 1.2); tone(1174.66, 0.06, 1.2, 'sine', 0.1); return true;
+}
+// ================= ROUND 5: abilities, rescues, aim shadow =================
+// --- earned flying abilities: Dart (Q) and Leap (E)
+G.dart = false; G.leap = false; G.abilCD = 1; G.dartCD = 0; G.leapCD = 0; G.dartT = 0; G.want = null;
+UNLOCKS.push(
+  { at: 30, name: 'Dart', desc: 'press Q for a sudden burst of wing strength', apply: () => G.dart = true },
+  { at: 65, name: 'Leap', desc: 'press E to spring straight up', apply: () => G.leap = true },
+  { at: 140, name: 'Quick recovery', desc: 'Dart and Leap come back twice as fast', apply: () => G.abilCD = 0.5 });
+UNLOCKS.sort((a, b) => a.at - b.at); applyUnlocks(false);
+addEventListener('keydown', e => { if (e.repeat) return; if (e.code === 'KeyQ') G.want = 'dart'; if (e.code === 'KeyE') G.want = 'leap'; });
+function abilities(dt) {
+  G.dartCD -= dt; G.leapCD -= dt; G.dartT -= dt;
+  if (G.want === 'dart' && G.dart && G.dartCD <= 0) { G.dartCD = 6 * G.abilCD; G.dartT = 0.7; P.vel.addScaledVector(fwd, 34); sweep(260, 820, 0.35, 0.06, 'sawtooth'); noiseHit(1400, 0.8, 0.12, 0.25); _v.copy(P.pos).addScaledVector(fwd, -1.2); puff(_v, 14, [0.95, 0.9, 0.7], 3, 0.008, 0.6); }
+  if (G.want === 'leap' && G.leap && G.leapCD <= 0) { G.leapCD = 7 * G.abilCD; P.vel.y = Math.max(P.vel.y, 0) + 26; sweep(180, 700, 0.4, 0.06, 'sawtooth'); _v.copy(P.pos); _v.y -= 1; puff(_v, 16, [0.95, 0.9, 0.7], 2.5, 0.008, 0.6, 0, -1); }
+  G.want = null;
+}
+// --- rescue events: a sister mobbed by wasps
+const MOB = { active: false, t: 0, next: 45, sis: makeFlier(1.0), home: false, anchor: new V3(), beat: 0 };
+MOB.sis.update = (dt) => {
+  const s = MOB.sis;
+  if (!MOB.active && !MOB.home) { s.p.set(0, -400, 0); s.s.setScalar(0.001); s.first = true; return; }
+  s.s.setScalar(1.0);
+  if (MOB.home) { _v.set(0, TY, 14); s.p.lerp(_v, Math.min(1, dt * 0.35)); if (s.p.distanceTo(_v) < 3) MOB.home = false; }
+  else { s.p.set(MOB.anchor.x + Math.sin(time * 11) * 0.25, MOB.anchor.y + Math.sin(time * 7.3) * 0.3, MOB.anchor.z + Math.cos(time * 9.1) * 0.25); }
+  s.face(dt);
+};
+const mobGlow = new THREE.Sprite(richGlows[0].s.material.clone()); mobGlow.material.color = new THREE.Color(2.4, 0.9, 0.35); mobGlow.center.set(0.5, 0); mobGlow.scale.set(3, 30, 1); mobGlow.visible = false; scene.add(mobGlow);
+function mobUpdate(w, d, flying, dt) {
+  w.hitCool = (w.hitCool || 0) - dt;
+  if (w.state === 'idle') return null;
+  if (w.state === 'mob') {
+    const s = MOB.sis.p; _wv.set(s.x + Math.cos(time * 3.3 + w.ph) * 2.3, s.y + Math.sin(time * 4.1 + w.ph) * 0.9, s.z + Math.sin(time * 3.3 + w.ph) * 2.3);
+    if (flying && d < 2.4) {
+      const sp = P.vel.length();
+      if (sp > 11 || G.dartT > 0) { w.state = 'flee'; w.t = 0; _v.copy(w.p).sub(P.pos).normalize(); w.away = w.p.clone().addScaledVector(_v, 90); w.away.y += 25; w.v.copy(_v).multiplyScalar(32);
+        noiseHit(500, 1.2, 0.25, 0.2, 'lowpass', 120); sweep(520, 200, 0.4, 0.05, 'sawtooth'); puff(w.p, 18, [1.0, 0.9, 0.4], 3, 0.012, 0.8); toast('<b>Bonk!</b> the wasp tumbles away', 1.5); }
+      else if (w.hitCool <= 0) { w.hitCool = 2; const n = losePollen(Math.ceil(P.load.length / 2)); tmp.copy(P.pos).sub(w.p).normalize(); P.vel.addScaledVector(tmp, 18); noiseHit(700, 1.5, 0.22, 0.25); toast(`<b>Stung!</b>${n ? ` you dropped ${n} pollen.` : ''} Hit them fast`, 2.5); }
+    }
+    return [_wv, 18];
+  }
+  if (w.state === 'flee') { if (w.t > 5) { w.state = 'idle'; } return [w.away, 26]; }
+  return [w.p, 0];
+}
+function startMob() {
+  _v.set(fwd.x, 0, fwd.z); if (_v.lengthSq() < 0.01) _v.set(1, 0, 0); _v.normalize().applyAxisAngle(YA, rnd(-0.9, 0.9)).multiplyScalar(rnd(45, 70)).add(P.pos);
+  if (Math.hypot(_v.x, _v.z) > 300 || overWater(_v.x, _v.z) || (!G.orchard && Math.hypot(_v.x - ORCH.x, _v.z - ORCH.z) < HEDGE_R + 10)) return false;
+  MOB.anchor.set(_v.x, terrainH(_v.x, _v.z) + rnd(7, 12), _v.z); MOB.active = true; MOB.t = 0; MOB.home = false; MOB.sis.p.copy(MOB.anchor);
+  for (const w of wasps) if (w.mob) { w.state = 'mob'; w.t = 0; w.p.copy(MOB.anchor).add(new V3(rnd(-3, 3), rnd(-1, 2), rnd(-3, 3))); w.v.set(0, 0, 0); }
+  toast('<b>A sister is in trouble!</b><br><span>wasps are mobbing her. Hit them hard and fast to drive them off</span>', 5); return true;
+}
+function endMob(saved) {
+  MOB.active = false; MOB.home = true; MOB.next = rnd(55, 95); mobGlow.visible = false;
+  if (saved) { const room = Math.max(0, G.cap - P.load.length), give = Math.min(room, 3); for (let i = 0; i < give; i++) P.load.push(2); P.pollen = P.load.length; if (give < 3) gainHoney((3 - give) * 2);
+    [0, 2, 4, 7].forEach((n, i) => tone(SCALE[n], 0.1, 2.2, 'sine', i * 0.1)); puff(MOB.sis.p, 24, [1.0, 0.85, 0.3], 2, 0.012, 1.4); toast('<b>Your sister is safe!</b><br><span>she shares her pollen with you</span>', 4); }
+  else { for (const w of wasps) if (w.mob && w.state === 'mob') { w.state = 'flee'; w.t = 0; w.away = w.p.clone().add(new V3(rnd(-80, 80), 30, rnd(-80, 80))); } if (P.pos.distanceTo(MOB.anchor) < 150) toast('<b>The wasps made off with her pollen</b>', 3); }
+}
+function updateMob(dt) {
+  if (!MOB.active) { if (P.mode === 'fly' && !inHive && outF > 0.8) { MOB.next -= dt; if (MOB.next <= 0) { if (!startMob()) MOB.next = 5; } } return; }
+  MOB.t += dt; const d = P.pos.distanceTo(MOB.anchor);
+  mobGlow.visible = true; mobGlow.position.set(MOB.anchor.x, MOB.anchor.y + 1.5, MOB.anchor.z); mobGlow.material.opacity = 0.35 + 0.25 * Math.sin(time * 6);
+  MOB.beat -= dt; if (MOB.beat <= 0 && d < 160) { MOB.beat = 0.6; sweep(rnd(900, 1100), rnd(1300, 1500), 0.15, 0.02 + 0.03 * (1 - d / 160)); }
+  if (wasps.every(w => !w.mob || w.state !== 'mob')) endMob(true); else if (MOB.t > 32) endMob(false);
+}
+// --- soft shadow under the bee: where you'd land
+const aimShadow = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.ShaderMaterial({ uniforms: { uA: { value: 0 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+  vertexShader: 'varying vec2 vP; void main(){ vP=position.xy; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: 'uniform float uA; varying vec2 vP; void main(){ float r=length(vP); gl_FragColor=vec4(0.03,0.02,0.0,uA*smoothstep(1.0,0.2,r)); }' }));
+aimShadow.rotation.x = -Math.PI / 2; aimShadow.renderOrder = 5; scene.add(aimShadow);
+function updateAimShadow() {
+  if (P.mode !== 'fly' || inHive) { aimShadow.visible = false; return; }
+  let y = terrainH(P.pos.x, P.pos.z); if (overWater(P.pos.x, P.pos.z)) y = Math.max(y, WY);
+  for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (d < f.r * 0.75 + f.len * 0.85 && f.y < P.pos.y) { const t = f.y + bloomH(f, d) + 0.05; if (t > y) y = t; } }
+  const h = P.pos.y - y; aimShadow.visible = h < 30; aimShadow.position.set(P.pos.x, y + 0.06, P.pos.z); aimShadow.scale.setScalar(0.55 + h * 0.03); aimShadow.material.uniforms.uA.value = 0.55 * (1 - h / 30);
+}
+function updateRound5(dt) { updateMob(dt); updateAimShadow(); waspAudio(); }
+// --- valuable flowers make you stay: dwell time grows with value, and the wasps notice
+function dwellSip(f, dt) {
+  const need = f.val >= 3 ? 2.0 : 1.0;
+  if (time - (f.lastLand || -9) > 0.25) { G.holdT = 0; if (f.val >= 3) summonRaid(f, 1); } f.lastLand = time; G.holdT += dt; G.holdF = f; G.holdNeed = need;
+  if (Math.random() < dt * 6) { _v.set(f.sx + rnd(-0.6, 0.6), f.y + 1, f.sz + rnd(-0.6, 0.6)); puff(_v, 1, [1.0, 0.85, 0.3], 0.6, 0.009, 0.7, 0.3, 0.6); }
+  if (G.holdT >= need) { G.holdT = 0; f.cool = f.val >= 3 ? 70 : 30; addPollen(f); }
+}
+// --- wasps sound different: a harsh, higher whine that pans and rises as they close in
+const WA = { on: false };
+function waspAudio() {
+  if (!A.ctx || !A.master) return; const c = A.ctx;
+  if (!WA.on) {
+    WA.o1 = c.createOscillator(); WA.o1.type = 'sawtooth'; WA.o2 = c.createOscillator(); WA.o2.type = 'square';
+    WA.f = c.createBiquadFilter(); WA.f.type = 'bandpass'; WA.f.frequency.value = 1500; WA.f.Q.value = 1.1; WA.g = c.createGain(); WA.g.gain.value = 0;
+    WA.lfo = c.createOscillator(); WA.lfo.frequency.value = 27; WA.lg = c.createGain(); WA.lg.gain.value = 22; WA.lfo.connect(WA.lg); WA.lg.connect(WA.o1.frequency); WA.lg.connect(WA.o2.frequency);
+    WA.o1.connect(WA.f); WA.o2.connect(WA.f); WA.f.connect(WA.g); WA.p = c.createStereoPanner ? c.createStereoPanner() : null;
+    if (WA.p) { WA.g.connect(WA.p); WA.p.connect(A.master); } else WA.g.connect(A.master);
+    WA.o1.start(); WA.o2.start(); WA.lfo.start(); WA.on = true;
+  }
+  let best = null, bd = 1e9; for (const w of wasps) { if (w.state === 'idle') continue; const d = w.p.distanceTo(camera.position); if (d < bd) { bd = d; best = w; } }
+  const angry = best && (best.state === 'chase' || best.state === 'mob' || best.state === 'approach');
+  setG(WA.g.gain, best ? Math.pow(Math.max(0, 1 - bd / 90), 2) * (angry ? 0.11 : 0.045) : 0, 0.12);
+  if (best) { _v.copy(best.p).sub(camera.position); const L = Math.max(0.01, _v.length()); _v.multiplyScalar(1 / L); const closing = -_v.dot(_v2.copy(best.v).sub(P.vel));
+    const base = 340 + clamp(closing, -20, 30) * 4 + (angry ? 40 : 0); setG(WA.o1.frequency, base, 0.08); setG(WA.o2.frequency, base * 1.505, 0.08);
+    if (WA.p) { _v2.set(1, 0, 0).applyQuaternion(camera.quaternion); setG(WA.p.pan, clamp(_v.dot(_v2), -1, 1) * 0.9, 0.08); } }
 }
 function windHint() { if (camQuiet) return; if (time > G.windHintT) { G.windHintT = time + 7; toast(`<b>The hedge winds are too strong</b><br><span>the orchard opens at 20 honey (you have ${G.honey})</span>`, 4); } }
 // ---------- sun shadows ----------
@@ -1546,4 +1671,4 @@ function adaptRes(ms) {
 }
 
 requestAnimationFrame(frame);
-window.__g = { STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+window.__g = { MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
