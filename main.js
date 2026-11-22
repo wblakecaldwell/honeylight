@@ -110,6 +110,8 @@ const cloverGLSL = () => `
     alb=mix(alb,vec3(0.05,0.15,0.025)*(0.8+0.35*ch)+chev*vec3(0.05,0.06,0.03),lf*cm*step(ch,0.75));
     float ms=smoothstep(0.55,0.7,fbm(vW.xz*0.06+11.0)); alb=mix(alb,vec3(0.13,0.27,0.04)*(0.55+0.8*vnoise(vW.xz*14.0)),ms*0.55*(1.0-cm));`;
 U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 };
+// night hooks (night.js): uNight 0..1 turns the sun into the moon and brings out the stars; uLamp is one soft light that travels with the bee (xyz, strength)
+U.uNight = { value: 0 }; U.uLamp = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uLampC = { value: new V3(1.0, 0.78, 0.36) };
 const SWAYGLSL = `uniform float uTime; uniform vec3 uWind; attribute float aSway;
 vec2 sway(vec2 p){ float ph=p.x*0.07+p.y*0.05; float s=sin(uTime*1.3+ph)*0.6+sin(uTime*2.9+ph*1.7)*0.25; return uWind.xy*(uWind.z*0.55+s*(0.35+uWind.z*0.4)); }
 `;
@@ -131,7 +133,7 @@ void main(){
   gl_Position=projectionMatrix*viewMatrix*w;
 }`;
 const COMMON = `
-uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze;
+uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC;
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;
 float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -154,7 +156,9 @@ float sunShadow(vec3 p, vec3 n){
 vec3 hazeCol(vec3 dir){
   float sd=max(dot(dir,uSun),0.0);
   vec3 c=mix(vec3(0.46,0.52,0.70), vec3(1.30,0.84,0.46), 0.12+0.88*pow(sd,2.0));
-  return (c+vec3(1.4,0.75,0.3)*pow(sd,20.0)*0.9)*uHaze;
+  vec3 hc=c+vec3(1.4,0.75,0.3)*pow(sd,20.0)*0.9;
+  if(uNight>0.001) hc=mix(hc, vec3(0.50,0.56,0.70)+vec3(0.55,0.60,0.75)*pow(sd,6.0), uNight);
+  return hc*uHaze;
 }
 bool inHole(vec3 p){ return p.x>0.0 && length(vec2(p.y-${TY.toFixed(1)},p.z))<${TR.toFixed(2)}; }
 vec3 shade(vec3 alb, vec3 n, vec3 p, float spec, float sss){
@@ -167,6 +171,7 @@ vec3 shade(vec3 alb, vec3 n, vec3 p, float spec, float sss){
   vec3 lo=alb*( sunC*shd*max(nd,0.0) + sunC*shd*sss*(0.45*max(-nd,0.0)+0.9*back)
      + uAmb*(vec3(0.22,0.30,0.50)*(0.55+0.45*n.y)*(0.75+0.25*shd) + vec3(0.26,0.19,0.08)*(0.5-0.5*n.y)) );
   vec3 H=normalize(uSun+V); lo+=sunC*shd*spec*pow(max(dot(n,H),0.0),48.0)*step(0.0,nd);
+  if(uLamp.w>0.0){ vec3 Lq=uLamp.xyz-p; float dq=dot(Lq,Lq); lo+=alb*uLampC*(uLamp.w/(1.0+dq*0.045))*(0.35+0.65*max(dot(n,Lq*inversesqrt(dq+1e-4)),0.0)); }
   lo+=uAmb*vec3(1.1,0.75,0.42)*spec*0.6*pow(1.0-max(dot(n,V),0.0),4.0)*(0.3+0.7*shd);
   vec3 L=vec3(10.6,${TY.toFixed(1)},0.0)-p; float d=length(L); L/=d;
   float att=24.0/(8.0+d*d);
@@ -224,20 +229,28 @@ void main(){ vec3 dir=normalize(vL); float e=dir.y;
   vec3 hz=hazeCol(dir), zen=vec3(0.07,0.17,0.46)*uHaze;
   vec3 c=mix(hz,zen,pow(clamp(e,0.,1.),0.5));
   float sd=max(dot(dir,uSun),0.);
-  c+=vec3(1.5,0.85,0.35)*(pow(sd,5.)*0.35+pow(sd,60.)*1.4)+vec3(30.,22.,12.)*smoothstep(0.9992,0.9996,sd);
+  vec3 glowC=vec3(1.5,0.85,0.35), discC=vec3(30.,22.,12.);
+  if(uNight>0.001){ glowC=mix(glowC,vec3(0.10,0.13,0.22),uNight); vec2 mq=dir.xz*40.0+dir.y*17.0; discC=mix(discC,vec3(5.2,5.6,6.4)*(0.72+0.5*fbm(mq)),uNight);
+    vec3 sp=dir*210.0; vec3 si=floor(sp); float sh=hash21(si.xy+si.z*17.13); float sr=length(fract(sp)-0.5-(vec3(hash21(si.yz+1.7),hash21(si.zx+5.1),hash21(si.xy+9.3))-0.5)*0.6);
+    float star=step(0.972,sh)*smoothstep(0.13,0.02,sr)*(0.55+0.45*sin(uTime*(1.0+sh*3.0)+sh*90.0));
+    c+=vec3(0.75,0.82,1.0)*star*(0.5+3.0*fract(sh*37.0))*uNight*smoothstep(0.03,0.25,e)*(1.0-smoothstep(0.985,0.9992,sd)); }
+  c+=glowC*(pow(sd,5.)*0.35+pow(sd,60.)*1.4)+discC*smoothstep(0.9992,0.9996,sd);
   vec2 cu=dir.xz/(abs(dir.y)+0.14)*1.3; float cl=fbm(cu+uTime*0.004);
   cl=smoothstep(0.50,0.80,cl)*smoothstep(0.02,0.2,e);
   float thick=fbm(cu*3.0);
   vec3 cloudC=mix(vec3(0.78,0.66,0.72), vec3(1.9,1.25,0.7), pow(sd,3.0))*(0.7+0.35*thick);
   cloudC+=vec3(2.2,1.2,0.5)*pow(sd,12.0)*(1.0-thick)*1.2;
+  if(uNight>0.001) cloudC=mix(cloudC,(vec3(1.5,1.6,1.9)+vec3(3.5,3.7,4.2)*pow(sd,6.0)*(1.0-thick))*(0.6+0.4*thick),uNight);
   c=mix(c, cloudC*uHaze, cl*0.85);
   // the sky's light pattern: a faint pearly shimmer standing over home, the way bees read polarized light
   float hd=max(dot(normalize(dir.xz+vec2(1e-5)),uHome.xz),0.0); float band=pow(hd,30.0)*smoothstep(0.0,0.05,e)*smoothstep(0.9,0.12,e);
   float shim=0.55+0.45*sin(e*70.0-uTime*1.2+dir.x*9.0+dir.z*9.0);
-  c+=mix(vec3(0.75,0.7,1.1),vec3(0.95,0.85,0.6),smoothstep(0.0,0.4,e))*band*shim*uHomeK*0.5*uHaze;
+  vec3 shz=uHaze; if(uNight>0.001) shz=mix(uHaze,vec3(0.26,0.32,0.50),uNight); // at night the shimmer over home must still show
+  c+=mix(vec3(0.75,0.7,1.1),vec3(0.95,0.85,0.6),smoothstep(0.0,0.4,e))*band*shim*uHomeK*0.5*shz;
   float az=atan(dir.z,dir.x); vec2 ac=vec2(cos(az),sin(az));
   float hh=0.03+0.035*vnoise(ac*3.0+2.0)+0.012*vnoise(ac*11.0);
-  c=mix(c, mix(vec3(0.20,0.24,0.20),hz,0.62), smoothstep(hh,hh-0.004,e));
+  vec3 hillC=vec3(0.20,0.24,0.20); if(uNight>0.001) hillC*=1.0-0.9*uNight;
+  c=mix(c, mix(hillC,hz,0.62), smoothstep(hh,hh-0.004,e));
   c=mix(c, hz, smoothstep(0.0,-0.05,e));
   gl_FragColor=vec4(tone(c),1.0); }`, { side: THREE.BackSide, depthWrite: false }));
 sky.renderOrder = -10; sky.frustumCulled = false; scene.add(sky);
@@ -866,7 +879,7 @@ const PAL = [
     float guide=smoothstep(0.62,0.12,v); float veins=pow(abs(sin(vUv.y*15.7)),10.0)*smoothstep(0.95,0.3,v);
     vec3 uvc=mix(vec3(0.30,0.06,0.95),vec3(0.10,0.95,0.90),0.5+0.5*sin(uTime*1.6+v*10.0));
     float k=reveal*clamp(guide*0.75+veins*0.6,0.0,1.0);
-    vec3 c=shade(mix(base,base*0.55,k*0.5),n,vW,0.12,1.0)+uvc*k*0.3;
+    vec3 c=shade(mix(base,base*0.55,k*0.5),n,vW,0.12,1.0)+uvc*k*0.3*(1.0-0.85*uNight);
     gl_FragColor=vec4(finish(c,vW),1.0); }`, { side: THREE.DoubleSide });
   const swayV = (stem, centre) => SWAYGLSL + VERT.replace('vec4 w = m*vec4(position,1.0);', `vec4 w = m*vec4(position,1.0); vec2 o=vec2(m[3][0],m[3][2])${centre ? '' : ''}; w.xz += sway(o)*aSway${stem ? '*position.y*position.y' : ''};`);
   petalMat.vertexShader = swayV(false);
@@ -1525,7 +1538,7 @@ function update(dt) {
     A.rich.forEach((r, i) => setG(r.g.gain, r.v * clamp(combUniforms.uHoney.value * 6 - i * 0.6 + pulse, 0, 1), 0.6));
     const flying = P.mode === 'fly'; setG(A.buzzG.gain, flying ? 0.012 + thrust * 0.03 + Math.min(0.02, spd * 0.001) : 0, 0.12); setG(A.buzz.frequency, 185 + spd * 2.5 + thrust * 18 - P.pollen * 4 - P.wet * 25, 0.1); setG(A.buzz2.frequency, 2 * (185 + spd * 2.5 + thrust * 18 - P.pollen * 4), 0.1);
     setG(A.windG.gain, outF * (0.035 + Math.min(0.06, spd * 0.003) + 0.05 * WIND.s) * (P.mode === 'gulp' ? 0.2 : 1), 0.4);
-    birdT -= dt; if (birdT < 0 && outF > 0.5 && P.mode === 'fly') { birdT = rnd(3, 9); const b = rnd(2200, 3600), n = 2 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) setTimeout(() => sweep(b * rnd(0.9, 1.1), b * rnd(1.15, 1.5), 0.09, 0.018), i * rnd(110, 160)); }
+    birdT -= dt; if (birdT < 0 && outF > 0.5 && P.mode === 'fly' && !(window.NIGHT && NIGHT.active)) { birdT = rnd(3, 9); const b = rnd(2200, 3600), n = 2 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) setTimeout(() => sweep(b * rnd(0.9, 1.1), b * rnd(1.15, 1.5), 0.09, 0.018), i * rnd(110, 160)); }
   }
 }
 resetCap();
@@ -1573,7 +1586,7 @@ function updateHud(dt) {
   let pips = ''; for (let i = 0; i < G.cap; i++) pips += i < P.load.length ? `<i class="on${P.load[i] > 1 ? ' gold' : ''}"></i>` : '<i></i>';
   const nu = nextUnlock(), chasing = wasps.some(w => w.state === 'chase'), coming = !chasing && wasps.some(w => w.state === 'approach' && w.t > 0 && w.p.distanceTo(P.pos) < 70);
   const html = `<div class="row"><span class="jar"></span><b>${G.honey}</b> honey <span class="dim">(${stores()} stored) · ${G.workers} sister${G.workers === 1 ? '' : 's'} foraging${G.escorts ? ` · ${G.escorts} flying with you` : ''}</span></div><div class="row pips">${pips}</div>` +
-    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : coming ? '<div class="row warn">wasps are coming...</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '') + (G.holdT > 0.2 && time - (G.holdF ? G.holdF.lastLand : 0) < 0.3 ? `<div class="row warn">hold on... ${'●'.repeat(Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4)))}</div>` : '') + (G.dart || G.leap ? `<div class="row dim">${G.dart ? `<kbd>Q</kbd> dart ${G.dartCD <= 0 ? '●' : '○'}` : ''}${G.leap ? ` &nbsp; <kbd>E</kbd> leap ${G.leapCD <= 0 ? '●' : '○'}` : ''}</div>` : '') + (MOB.active && P.pos.distanceTo(MOB.anchor) > 12 ? '<div class="row warn">a sister needs help: follow the red glow</div>' : '') + (GIANT && GIANT.cool > 0 && Math.hypot(P.pos.x - GIANT.x, P.pos.z - GIANT.z) < 30 ? '<div class="row dim">the great sunflower is refilling</div>' : '') + (P.mode !== 'rest' ? `<div class="row ${DAY.t > 0.78 ? 'warn' : 'dim'}">day ${DAY.n} · ${timeOfDay()}</div>` : '') + (G.payZ && time - G.payLast < 0.3 ? `<div class="row warn">leaving honey for the scouts... ${'●'.repeat(Math.ceil(G.payZ.pay / 1.6 * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.payZ.pay / 1.6 * 4)))}</div>` : '');
+    (nu ? `<div class="row dim">next at ${nu.at}: ${nu.name.toLowerCase()}</div>` : '') + (chasing ? '<div class="row warn">a wasp is after your pollen!</div>' : coming ? '<div class="row warn">wasps are coming...</div>' : '') + (P.stuck > 0 ? '<div class="row warn">stuck in a web: tap space!</div>' : '') + (G.holdT > 0.2 && time - (G.holdF ? G.holdF.lastLand : 0) < 0.3 ? `<div class="row warn">hold on... ${'●'.repeat(Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.holdT / (G.holdNeed || 2.8) * 4)))}</div>` : '') + (G.dart || G.leap ? `<div class="row dim">${G.dart ? `<kbd>Q</kbd> dart ${G.dartCD <= 0 ? '●' : '○'}` : ''}${G.leap ? ` &nbsp; <kbd>E</kbd> leap ${G.leapCD <= 0 ? '●' : '○'}` : ''}</div>` : '') + (MOB.active && P.pos.distanceTo(MOB.anchor) > 12 ? '<div class="row warn">a sister needs help: follow the red glow</div>' : '') + (GIANT && GIANT.cool > 0 && Math.hypot(P.pos.x - GIANT.x, P.pos.z - GIANT.z) < 30 ? '<div class="row dim">the great sunflower is refilling</div>' : '') + (P.mode !== 'rest' ? `<div class="row ${DAY.t > 0.78 && !(window.NIGHT && NIGHT.active && NIGHT.t < 0.85) ? 'warn' : 'dim'}">day ${DAY.n} · ${timeOfDay()}</div>` : '') + (G.payZ && time - G.payLast < 0.3 ? `<div class="row warn">leaving honey for the scouts... ${'●'.repeat(Math.ceil(G.payZ.pay / 1.6 * 4))}${'○'.repeat(Math.max(0, 4 - Math.ceil(G.payZ.pay / 1.6 * 4)))}</div>` : '');
   if (html !== hudCache) { hud.innerHTML = html; hudCache = html; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) toastEl.style.opacity = 0; }
 }
@@ -1665,7 +1678,7 @@ function updateWebs(dt) {
     }
   }
 }
-function wriggle() { if (P.stuck > 0) { P.stuck -= 0.45; noiseHit(rnd(1500, 2600), 3, 0.06, 0.06); return true; } return false; }
+function wriggle() { if (P.stuck > 0) { P.stuck = Math.max(0.001, P.stuck - 0.45); /* never below zero: the next update must run the release */ noiseHit(rnd(1500, 2600), 3, 0.06, 0.06); return true; } return false; }
 // --- hedge wind & passive income
 function updateWorld(dt) {
   if (P.mode === 'fly' || P.mode === 'crawl') { G.passive += dt * G.workers / 120; if (G.passive >= 1) { G.passive -= 1; gainHoney(1); } }
@@ -1688,9 +1701,10 @@ function flowerHit(f, d, dt) {
   if (p.y < bot) { if (d < sr) { const k = sr / Math.max(d, 0.01); p.x = fx + (p.x - fx) * k; p.z = fz + (p.z - fz) * k; } return false; }
   if (d > Rh + PR) return false;
   const top = f.y + (cl > 0.01 ? lerp(bloomH(f, Math.min(d, Rh)), f.len * (Math.sin(tE) + 0.24) + Math.abs(f.ax || 0) * d, cl) : bloomH(f, Math.min(d, Rh))) + PR + 0.15;
-  if (p.y > top + 0.001) return false;
+  const dwell = (f.val >= 2 || f.giant) && !(f.rich > 0), held = dwell && time - (f.lastLand || -9) < 0.3 && !(G.ku > 0) && !(G.kf < 0); // a bee on a rich bloom holds on: forward thrust does not pull her off
+  if (p.y > top + (held ? 0.7 : 0.001)) return false;
   const pt = top - p.y, pb = p.y - bot, ps = Rh + PR - d;
-  if (pt <= pb && pt <= 1.6 + big + ps) { p.y = top; v.y = Math.max(v.y, 0); v.x *= 1 - Math.min(1, dt * 5); v.z *= 1 - Math.min(1, dt * 5); P.landed = f; p.x += f.dsx; p.z += f.dsz; return d < Rh * 0.85; } // only the top of the bloom gives pollen
+  if (pt <= pb && pt <= 1.6 + big + ps) { p.y = top; v.y = Math.max(v.y, 0); v.x *= 1 - Math.min(1, dt * 5); v.z *= 1 - Math.min(1, dt * 5); P.landed = f; p.x += f.dsx; p.z += f.dsz; if (dwell && f.cool <= 0 && P.pollen < G.cap && !zoneLocked(f) && !(G.ku > 0) && !(G.kf < 0) && (held || d < Rh * 0.85)) { const k = Math.min(1, dt * 4); p.x += (fx - p.x) * k; p.z += (fz - p.z) * k; v.set(0, 0, 0); d = Math.hypot(p.x - fx, p.z - fz); } return d < Rh * 0.85; } // only the top of the bloom gives pollen
   else if (pb <= ps) { p.y = bot; v.y = Math.min(v.y, 0); }
   else { const k = (Rh + PR) / Math.max(d, 0.01); p.x = fx + (p.x - fx) * k; p.z = fz + (p.z - fz) * k; const nx = (p.x - fx) / (Rh + PR), nz = (p.z - fz) / (Rh + PR), vn = v.x * nx + v.z * nz; if (vn < 0) { v.x -= vn * nx * 1.3; v.z -= vn * nz * 1.3; } }
   return false;
@@ -1822,7 +1836,7 @@ function summitForces(acc, dt) {
 }
 function giantSip(f, dt) {
   // the great sunflower makes you hold on for a few seconds while the summit winds try to blow you off
-  if (time - (f.lastLand || -9) > 0.25) G.holdT = 0; f.lastLand = time; G.holdT += dt; G.holdF = f;
+  if (time - (f.lastLand || -9) > 0.5) G.holdT = 0; f.lastLand = time; G.holdT += dt; G.holdF = f;
   if (Math.random() < dt * 6) { _v.set(f.sx + rnd(-1, 1), f.y + 1.2, f.sz + rnd(-1, 1)); puff(_v, 2, [1.0, 0.85, 0.3], 0.8, 0.01, 0.8, 0.3, 0.6); }
   G.holdNeed = 2.8; if (G.holdT >= 2.8) { G.holdT = 0; f.cool = 150; addPollen(f); }
 }
@@ -2024,13 +2038,13 @@ const dayFade = document.createElement('div'); dayFade.style.cssText = 'position
 const dayCard = document.createElement('div'); dayCard.style.cssText = 'font:16px Georgia,serif;color:#f4e6c8;text-align:center;line-height:1.7;opacity:0;transition:opacity 1.2s ease;max-width:440px;padding:20px;';
 dayFade.id = 'dayfade'; dayFade.appendChild(dayCard); document.body.appendChild(dayFade);
 function dayCount(v) { DAY.honey += v; return v; }
-function timeOfDay() { const t = DAY.t; return t < 0.35 ? 'afternoon' : t < 0.62 ? 'late afternoon' : t < 0.78 ? 'evening' : t < 0.9 ? 'the sun is low: stock the hive' : 'dusk: flowers closing, head home'; }
+function timeOfDay() { if (window.NIGHT && NIGHT.active) return NIGHT.label(); const t = DAY.t; return t < 0.35 ? 'afternoon' : t < 0.62 ? 'late afternoon' : t < 0.78 ? 'evening' : t < 0.9 ? 'the sun is low: stock the hive' : 'dusk: flowers closing, head home'; }
 function updateDay(dt) {
   if (DAY.ending > 0) { dayEnd(dt); return; }
   if (P.mode === 'fly' || P.mode === 'crawl') DAY.t += dt / DAY.LEN;
   if (DAY.t > 0.78 && DAY.warned < 1) { DAY.warned = 1; toast('<b>The sun is getting low</b><br><span>stock the hive before dark</span>', 5); tone(SCALE[4], 0.06, 2.5); }
   if (DAY.t > 0.9 && DAY.warned < 2) { DAY.warned = 2; toast('<b>The flowers are closing</b><br><span>head home: night is coming</span>', 5); tone(SCALE[2], 0.06, 2.5); tone(SCALE[0], 0.05, 2.5, 'sine', 0.3); }
-  if (DAY.t >= 1) DAY.ending = 1e-4;
+  if (DAY.t >= 1 && !(window.NIGHT && NIGHT.hold(dt))) DAY.ending = 1e-4; // night.js can hold the end of the day until the moon sets
   applyDayLight();
 }
 function dayEnd(dt) {
@@ -2063,7 +2077,7 @@ function updateHome(dt) {
   const tg = P.mode === 'fly' && !inHive ? (P.pollen > 0 ? 1 : 0.4) * smooth(45, 100, L) : 0; U.uHomeK.value += (tg - U.uHomeK.value) * Math.min(1, dt * 0.8);
   if (!G.seenHome && P.pollen >= G.cap && L > 120) { G.seenHome = true; hint('bees read the light in the sky: a faint shimmer stands over home', 6); }
 }
-function updateRound6(dt) { tipsTick(); updateHomePull(dt); updateBatch2(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
+function updateRound6(dt) { tipsTick(); updateHomePull(dt); updateBatch2(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); if (window.NIGHT) NIGHT.update(dt); }
 applyDayLight();
 G.orchard = !!G.zones.garden;
 function beeCollide() {
@@ -2077,7 +2091,7 @@ function updateRound5(dt) { updateMob(dt); updateAimShadow(); waspAudio(); updat
 // --- valuable flowers make you stay: dwell time grows with value, and the wasps notice
 function dwellSip(f, dt) {
   const need = f.val >= 3 ? 2.0 : 1.0;
-  if (time - (f.lastLand || -9) > 0.25) { G.holdT = 0; if (f.val >= 3) summonRaid(f, 1); } f.lastLand = time; G.holdT += dt; G.holdF = f; G.holdNeed = need;
+  if (time - (f.lastLand || -9) > 0.5) { G.holdT = 0; if (f.val >= 3) summonRaid(f, 1); } f.lastLand = time; G.holdT += dt; G.holdF = f; G.holdNeed = need;
   if (Math.random() < dt * 6) { _v.set(f.sx + rnd(-0.6, 0.6), f.y + 1, f.sz + rnd(-0.6, 0.6)); puff(_v, 1, [1.0, 0.85, 0.3], 0.6, 0.009, 0.7, 0.3, 0.6); }
   if (G.holdT >= need) { G.holdT = 0; f.cool = f.val >= 3 ? 70 : 30; addPollen(f); }
 }
@@ -2643,4 +2657,4 @@ function crawlView() { const h = P.ch || 0, cp = P.cp || 0; _cl.set(-Math.sin(h)
   if (P.q0 && P.t < 0.7) { _cq.copy(camera.quaternion); camera.quaternion.slerpQuaternions(P.q0, _cq, smooth(0, 0.7, P.t)); } }
 function viewBlend() { if (P.mode === 'crawl') crawlView(); else if (P.tkq && time - P.tk < 0.5) { _cq.copy(camera.quaternion); camera.quaternion.slerpQuaternions(P.tkq, _cq, smooth(0, 0.5, time - P.tk)); } }
 
-window.__g = { look, takeOff, showKeys, keysHTML, TIPS, MP, MPSTAT, LIMBS, HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+window.__g = { get time() { return time; }, get inHive() { return inHive; }, get outF() { return outF; }, scene, renderer, mat, simple, geoParts, ell, stick, untoneHex, COMMON, VERT, SWAYGLSL, puff, toast, hint, tone, noiseHit, sweep, addPollen, losePollen, flowerHit, collide, zoneBlocked, zoneLocked, overWater, endMob, save, PR, HEDGE_R, HEDGE_GAPS, noShadow: o => hidden.push(o), tipOnce, look, takeOff, showKeys, keysHTML, TIPS, MP, MPSTAT, LIMBS, HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };

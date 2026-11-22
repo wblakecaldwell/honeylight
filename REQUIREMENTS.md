@@ -82,6 +82,8 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 - **FLW-003** In the walled garden, the canopy flowers are value 1. The ground flowers are value 2. The five sunblooms near the trees are value 3.
 - **FLW-004** Flower types include daisy, poppy and cosmos. Poppies must be open, not closed like tulips.
 - **FLW-005** A golden glow shows a flower that overflows with nectar. The glow does not stay for a long time.
+- **FLW-006** When the bee lands on a flower that needs a hold, the bee stays on the flower until it gets the pollen. Forward thrust (W) must not push the bee off. Space or S releases the bee. (2026-11-22)
+- **FLW-007** Removed on 2026-11-22. The owner did not want garden nectar or royal jelly.
 
 ## 7. Hidden flight challenges
 
@@ -110,13 +112,15 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 
 - **WSP-012** Calm: after every 5 wasps that the bee beats, the other wasps keep away for 60 seconds.
 - **WSP-013** Controls: F is heat buzz. R calls the sisters. The bee needs 3 sisters or more to call them.
+- **WSP-014** Removed on 2026-11-22. The owner does not want the hunter path (Ember wings, Strike, Finisher). Do not add it again.
+- **WSP-015** Later (not done): a gardener path. Garden flowers give seeds. The bee plants a seed on bare ground and a flower grows. (2026-11-22)
 
 ## 9. Zones, honey and the day
 
 - **ZON-001** Honey stores are the lifetime honey minus the honey that the bee spent.
 - **ZON-002** Scent stones open zones: the walled garden (20 honey), the lily pond (60), the forest edge (120). The bee lands on the wax to pay.
 - **ZON-003** A locked zone pushes the bee back with a breeze.
-- **ZON-004** A day is 8 minutes. The sun goes down. Flowers close at dusk. Pollen outside the hive at night is lost.
+- **ZON-004** A day is 8 minutes. The sun goes down. Flowers close at dusk. Pollen outside the hive at night is lost. With the night (section 11), the day ends at moonset (NGT-025).
 - **ZON-005** At the end of the day, a card shows bonus honey.
 - **ZON-006** A faint shimmer in the sky must stand above the direction of the hive (the sun compass of the bee). It must be subtle. Do not use arrows, a compass, or a HUD marker.
 
@@ -129,8 +133,56 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 - **GFX-005** Hive tree: dark bark plates with no long pale streaks. The hive door has a lumpy, dark propolis lip, amber stains and small wax drips. The lip must not make the opening smaller.
 - **GFX-006** Add `?mp=0` to the address to see the old look for a comparison.
 
+## 11. The night
+
+- **NGT-001** At the end of the day (dusk), the night starts. The day does not end at dusk. The moon rises.
+- **NGT-002** The moon is the clock of the night. A night is 4 minutes (240 seconds). The moon rises, goes across the sky, and sets.
+- **NGT-003** When the moon is low, show a short message: fly home before the moon sets.
+- **NGT-004** The bee can sleep in the hive to skip the night. The bee must stay in the hive for 15 seconds with no pollen. Then the night ends.
+- **NGT-005** Moonflowers open only at night. In the day, do not show moonflowers.
+- **NGT-006** Plain moonflowers stand in the open meadow, away from the hive, the zones and other flowers. They are value 2.
+- **NGT-007** Two moonflowers stand on high hilltops, in the wind. They are value 3.
+- **NGT-008** A moonflower must look like a real moonflower: a wide, white, shallow trumpet with five points, a pale green star of creases and a pale green-yellow throat. It stands on a slim stem with heart-shaped leaves.
+- **NGT-009** A closed moonflower is a slim, twisted, pointed bud. When it opens, it must turn and spread. It must not only grow larger.
+- **NGT-010** An open moonflower glows softly from the throat and the creases. The light is cool blue-white. The petals stay dim. Do not make a white blob.
+- **NGT-011** The bee gets nectar only from the top of an open moonflower. The bee must hold on (approximately 1 second; approximately 1.5 seconds in the grove).
+- **NGT-012** Each moonflower gives nectar one time each night. After that, its glow becomes weak.
+- **NGT-013** Moonflowers are solid, like all flowers (COL-003).
+- **NGT-014** Loose fireflies drift near the open moonflowers.
+- **NGT-015** Clusters of fireflies sleep at three places: above the flower field, near the standing stone and before the dew arches.
+- **NGT-016** When the bee flies through a sleeping cluster, the fireflies wake. They make a line of loose, living loops, with some fireflies between the loops. The line goes to the root of the bramble hollow.
+- **NGT-017** When the bee flies through a loop, the loop pulses. Some fireflies then fly behind the bee as a tail.
+- **NGT-018** Each loop has a time limit (13 to 15 seconds). The next loop blinks when the time is almost over. If the time ends, the fireflies drift back to sleep. There is no other penalty. The bee can try again after approximately 9 seconds.
+- **NGT-019** The fireflies are creatures. A loop must move and must have an uneven shape. A loop must never look like a perfect hoop.
+- **NGT-020** The tail lights the ground and the flowers near the bee with a soft, warm light.
+- **NGT-021** The tail leaves the bee at the hive door.
+- **NGT-022** When the bee completes a full line of loops and goes in by the root, the fireflies light the grove in the hollow. Five large moonflowers then open.
+- **NGT-023** The grove moonflowers are value 4. They open only after a full line of loops. They are a little richer in color (a faint lilac edge).
+- **NGT-024** At night, wasps stay in their nests. Rescue events, overflowing day flowers and nest raids do not start.
+- **NGT-025** At moonset, the night ends and the day card shows (ZON-005). Pollen that is outside the hive at moonset is lost (ZON-004). Note: before the night, this happened at dusk. Now it happens at moonset, or when the bee sleeps in the hive.
+- **NGT-026** Add `?night=0` to the address to switch off all of the night. On a page that does not keep the `?` part (the Claude artifact), add `#night-off`. Then the day must play and look exactly as before, pixel for pixel.
+- **NGT-027** The night must not change the random numbers of the day. The night uses its own random numbers.
+- **NGT-028** Do not use rings, gates, courses or checkpoints in the night, in the words or in the look (GEN-001, GEN-002).
+- **NGT-029** Each loop must be in clear air. A loop must not be in a solid object or in a locked zone. A loop must be wide enough for a careful pilot (radius 1.7 or more).
+- **NGT-030** After the last loop before the root, the line is safe. The fireflies then wait for the bee in the hollow for 45 seconds.
+
+## 12. Tests
+
+- **TST-001** Tests must be deterministic. The same game files must always give the same results.
+- **TST-002** The test harness sets a fixed random seed, a frozen clock and fixed time steps. Tests must not use real time or sleeps.
+- **TST-003** Each test has the ID of the requirement that it checks.
+- **TST-004** Each test starts with a fresh game.
+- **TST-005** A screenshot must match its reference image pixel for pixel. Use one container image for all screenshots.
+- **TST-006** When a change must alter the look, look at the new screenshots and the difference images first. Then save the new reference images.
+- **TST-007** Run all tests two times (`--twice`) after a change to the test harness. Both runs must give the same results.
+- **TST-008** Run all tests before each release. If a test fails, do not publish (see "How to use this document").
+- **TST-009** If a test cannot work until the game is repaired, keep it in a pending list with the reason. Add it to the tests after the repair.
+
 ## Change log
 
+- 2026-11-22: Added NGT-001 to NGT-030 (the night: moon, moonflowers, fireflies, the hollow grove) and TST-001 to TST-009 (tests). ZON-004 and ZON-005 now happen at moonset (NGT-025). Not approved by the owner yet.
+- 2026-11-22: Removed FLW-007 and WSP-014 (hunter path undone at the owner's request).
+- 2026-11-22: Added FLW-006 (hold on to a flower), FLW-007 (garden nectar), WSP-014 (royal jelly, hunter path), WSP-015 (gardener path, later).
 - 2026-11-22: Added HIV-013, HIV-014 (mouse on the comb) and KEY-001 to KEY-006 (controls help).
 - 2026-11-22: GFX-003 changed (model pass done). Added GFX-004 to GFX-006.
 - 2026-11-22: Added HIV-011 (easy return to the hive) and HIV-012 (no colored spots at the hive opening).

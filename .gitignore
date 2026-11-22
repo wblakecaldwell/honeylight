@@ -4,3 +4,6 @@ backup/
 look-previews/
 
 .DS_Store
+staging/
+handoff/
+tests/out/
