@@ -71,6 +71,7 @@ export function setupWind() {
 export function updateWind(dt) {
   const a = 0.6 + Math.sin(time * 0.021) * 0.9; WIND.dx = Math.cos(a); WIND.dz = Math.sin(a);
   WIND.s = 0.15 + 0.85 * smooth(0.35, 1, 0.5 + 0.5 * Math.sin(time * 0.16 + Math.sin(time * 0.047) * 3));
+  if (window.STORM) STORM.wind(WIND); // storm.js can take over the wind
   U.uWind.value.set(WIND.dx * SWAY_AMP, WIND.dz * SWAY_AMP, WIND.s);
   for (const f of flowers) { if (!f.sway) continue; const ph = f.x * 0.07 + f.z * 0.05, s = Math.sin(time * 1.3 + ph) * 0.6 + Math.sin(time * 2.9 + ph * 1.7) * 0.25, k = (WIND.s * 0.55 + s * (0.35 + WIND.s * 0.4)) * f.sway;
     const nx = f.x + WIND.dx * SWAY_AMP * k, nz = f.z + WIND.dz * SWAY_AMP * k; f.dsx = nx - f.sx; f.dsz = nz - f.sz; f.sx = nx; f.sz = nz; }

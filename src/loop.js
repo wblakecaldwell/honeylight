@@ -63,15 +63,18 @@ export function update(dt) {
     const sp = 1.7; P.pos.x += (tmp.x * kf + _v.x * ks) * sp * dt; P.pos.y += (tmp.y * kf + _v.y * ks) * sp * dt;
     P.pos.x = clamp(P.pos.x, -c.hw + 0.3, c.hw - 0.3); P.pos.y = clamp(P.pos.y, c.yb + 0.4, HTOP - 0.5); P.pos.z = c.z + CT / 2 + 0.24; P.cdir.copy(tmp);
     if (kf || ks) bob += dt * 11;
+    P.wad = lerp(P.wad || 0, kf || ks ? 1 : 0, Math.min(1, dt * 7)); P.wadPh = bob; // player.js: the waddle, seen from outside
     // the sister's greeting
     heroT += dt; if (hero.active) { if (heroT < 3) { if (heroT < dt * 1.5) hero.tp.copy(P.pos).addScaledVector(fwd, 0.95); hero.tp.z = clamp(hero.tp.z, c.z + 1.0, c.z + 2.0); hero.look.copy(P.pos); if (heroT > 1.2 && !hero.fed) { hero.fed = true; tone(659.25, 0.1, 2); tone(880, 0.08, 2.2, 'sine', 0.18); puff(hero.p, 8, [1, 0.8, 0.3], 0.4, 0.01, 1.2); } } else { hero.active = false; hero.fed = false; } }
     P.wingT += dt; if (!P.wingsReady && P.wingT > (P.lives > 1 ? 3 : 7)) { P.wingsReady = true; sweep(90, 200, 0.7, 0.06, 'sawtooth'); hint('<kbd>space</kbd>', 30); }
     if (P.wingsReady && touchFwd && P.wingT > 9) takeOff();
   } else if (P.mode === 'fly') {
-    const maxS = lerp(5.5, 30 * G.speed * (1 + 0.4 * Math.min(1, G.boost)), outF) * (1 - 0.075 * G.weight * P.pollen), damp = lerp(2.4, kf > 0 ? 1.6 : 3.6, outF);
+    const soak = P.soak || 0; // storm.js: wings soaked by rain (0..1) take the lift and most of the speed away
+    const maxS = lerp(5.5, 30 * G.speed * (1 + 0.4 * Math.min(1, G.boost)), outF) * (1 - 0.075 * G.weight * P.pollen) * (1 - 0.72 * soak), damp = lerp(2.4, kf > 0 ? 1.6 : 3.6, outF);
     acc.set(0, 0, 0).addScaledVector(fwd, kf).addScaledVector(right, ks * 0.8); acc.y += ku * 0.8; thrust = Math.min(1, acc.length());
-    acc.multiplyScalar(maxS * damp); if (ku > 0) acc.y *= 1 - P.wet * 0.6;
-    acc.y -= P.wet * 9 + P.pollen * 0.6 * G.weight * outF;
+    acc.multiplyScalar(maxS * damp); if (ku > 0) acc.y *= (1 - P.wet * 0.6) * (1 - soak);
+    acc.y -= P.wet * 9 + soak * 14 + P.pollen * 0.6 * G.weight * outF;
+    if (soak > 0 && ku > 0) acc.y += soak * 60 * clamp(1 - (P.pos.y - terrainH(P.pos.x, P.pos.z)) / 12, 0, 1); // storm.js: soaked wings can still flutter up to the grass tops (about 8 high), to look for a roof
     G.kf = kf; G.ku = ku; abilities(dt); airForces(acc, dt); summitForces(acc, dt);
     if (P.pollen > 0) { acc.x += Math.sin(time * 2.3) * P.pollen * 0.5; acc.y += Math.sin(time * 3.1) * P.pollen * 0.45; }
     if (!inHive) { const r = Math.hypot(P.pos.x, P.pos.z); if (r > 330) { acc.x -= P.pos.x / r * (r - 330) * 0.6; acc.z -= P.pos.z / r * (r - 330) * 0.6; } if (P.pos.y > 62) acc.y -= (P.pos.y - 62) * 1.5; }
@@ -178,7 +181,7 @@ function updateForagingAndHedgeWind(dt) {
     for (const ga of HEDGE_GAPS) if (Math.random() < dt * 30) { const a = ga + rnd(-HEDGE_GAP_W, HEDGE_GAP_W), r = HEDGE_R + rnd(-4, 4); _v.set(ORCH.x + Math.cos(a) * r, terrainH(ORCH.x + Math.cos(a) * r, ORCH.z + Math.sin(a) * r) + rnd(2, 36), ORCH.z + Math.sin(a) * r); const q = parts[pNext]; puff(_v, 1, [0.95, 0.97, 1.0], 0, 0.02, 1.2); q.v.set(Math.cos(a) * 30, rnd(-2, 2), Math.sin(a) * 30); }
   }
 }
-function updateDayPlacesAndAbilities(dt) { tipsTick(); updateHomePull(dt); updateBranchesGustsBrookAndCalm(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); if (window.NIGHT) NIGHT.update(dt); }
+function updateDayPlacesAndAbilities(dt) { tipsTick(); updateHomePull(dt); updateBranchesGustsBrookAndCalm(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); if (window.NIGHT) NIGHT.update(dt); if (window.STORM) STORM.update(dt); }
 function updateRescueShadowAndWaspSound(dt) { updateMob(dt); updateAimShadow(); waspAudio(); updateDayPlacesAndAbilities(dt); }
 
 export function setupFirstFrame() {

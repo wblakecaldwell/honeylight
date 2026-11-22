@@ -20,7 +20,7 @@ export function setupLandmarks() {
   HOLLOW.a0 = Math.atan2(-HOLLOW.z, -HOLLOW.x) + 0.6;
   LOG = (() => { const axis = new V3(ORCH.x, 0, ORCH.z).normalize(), mid = new V3(22, 0, -88), len = 46, ro = 5.6, ri = 4.5; let mg = -1e9;
     for (let u = -len / 2; u <= len / 2; u += 2) mg = Math.max(mg, terrainH(mid.x + axis.x * u, mid.z + axis.z * u));
-    return { c: new V3(mid.x, mg + ri + 0.4, mid.z), axis, len, ro, ri }; })();
+    return { c: new V3(mid.x, mg + ri + 0.4, mid.z), axis, len, ro, ri, foot: 10 }; })(); // foot: the length of the root flare at the -axis end
   {
     orchTrees.push({ x: ORCH.x, z: ORCH.z, R: 4.2, top: 0, cr: 16, nest: true });
     let guard = 0;

@@ -38,6 +38,7 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 
 - **HIV-013** On the comb, the mouse must turn the bee smoothly at all times. Left and right turn the bee on the comb. Up and down tilt the view only. The view must not ignore the mouse and then snap. The bee walks in the direction it faces. Added 2026-11-22.
 - **HIV-014** When the bee comes out of the cell, the view turns smoothly to look along the comb. At take-off, the view turns smoothly into flight.
+- **HIV-015** In the view from outside, the bee must waddle when it walks on the comb, as its sisters do: the body swings left and right, approximately three times a second. When the bee stands, the body must be still. (The owner, 2026-11-22.)
 
 ## 3. Flight
 
@@ -60,6 +61,7 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 ## 4. Camera and view
 
 - **CAM-001** V changes between first-person and third-person view. The game must keep the selected view.
+- **CAM-006** A new game must start with the camera outside the bee (third-person view). First-person view is used only if the player selected it with V. In the wax cell, before the bee is out, the view stays in the bee. (The owner, 2026-11-22.)
 - **CAM-002** In third-person view, the camera must stay on the line of flight.
 - **CAM-003** In third-person view, a soft shadow disc shows where the bee aims.
 - **CAM-004** In third-person view, the player must see the pollen on the bee. Pollen packs on the hind legs must grow as the baskets fill.
@@ -132,6 +134,8 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 - **GFX-004** Grass: tufts of slim blades that twist and curl, with dry tips and some seed spikes. Clover and moss grow on the ground. The grass must stay thick (CHL-002).
 - **GFX-005** Hive tree: dark bark plates with no long pale streaks. The hive door has a lumpy, dark propolis lip, amber stains and small wax drips. The lip must not make the opening smaller.
 - **GFX-006** Add `?mp=0` to the address to see the old look for a comparison.
+- **GFX-007** The old hollow log must look like a fallen tree, so that the player knows what it is: the same bark as the standing trees with ridges along the trunk, a wider root end, a splintered break at the other end, broken branch stubs, moss only in patches on the top side. It must not look like a smooth tube with flat sawn ends. The bee must stay outside the wider root end. (The owner, 2026-11-22.)
+- **GFX-008** The cover of the night grove (CHL-006) must look like a wild bramble thicket, so that the player knows what it is: many leaves with a ragged outline, arching canes with thorns, young green shoots that arch into the air, some small pale flowers, and black and red blackberries. It must not look like a smooth round mound with speckles. The walls, the roof and the root tunnel stay as they are (CHL-006). No leaves hang inside the grove or in the root tunnel. (The owner, 2026-11-22.)
 
 ## 11. The night
 
@@ -160,11 +164,32 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 - **NGT-023** The grove moonflowers are value 4. They open only after a full line of loops. They are a little richer in color (a faint lilac edge).
 - **NGT-024** At night, wasps stay in their nests. Rescue events, overflowing day flowers and nest raids do not start.
 - **NGT-025** At moonset, the night ends and the day card shows (ZON-005). Pollen that is outside the hive at moonset is lost (ZON-004). Note: before the night, this happened at dusk. Now it happens at moonset, or when the bee sleeps in the hive.
-- **NGT-026** Add `?night=0` to the address to switch off all of the night. On a page that does not keep the `?` part (the Claude artifact), add `#night-off`. Then the day must play and look exactly as before, pixel for pixel.
+- **NGT-026** Add `?night=0` to the address to switch off all of the night. On a page that does not keep the `?` part (the Claude artifact), add `#night-off`. This switch also turns off the moths and the bat (`moths.js`, `moth-model.js`, `bat.js`, `bat-model.js`). Then the day must play and look exactly as before, pixel for pixel.
 - **NGT-027** The night must not change the random numbers of the day. The night uses its own random numbers.
 - **NGT-028** Do not use rings, gates, courses or checkpoints in the night, in the words or in the look (GEN-001, GEN-002).
 - **NGT-029** Each loop must be in clear air. A loop must not be in a solid object or in a locked zone. A loop must be wide enough for a careful pilot (radius 1.7 or more).
 - **NGT-030** After the last loop before the root, the line is safe. The fireflies then wait for the bee in the hollow for 45 seconds.
+
+The lines NGT-031 to NGT-047 are not approved by the owner yet. NGT-037 to NGT-040 (moths as guides) are the owner's choice of 2026-11-22; their numbers and places are not approved yet. NGT-043 to NGT-045 (the dangerous bat) are the owner's request of 2026-11-22; the numbers (height 40, 6 seconds, 2.5 seconds) are not approved yet.
+
+- **NGT-031** Moths come from the second night. On the second night two moths come, then one more each night, up to four. They come one after the other as the moon climbs. On the first night no moths come.
+- **NGT-032** A moth is a pale hawk moth. It hovers at an open moonflower and drinks it. After approximately 30 seconds the flower is dry: it becomes dim and gives no nectar that night. Then the moth has drunk its fill: it drinks no more that night (NGT-037).
+- **NGT-033** When the bee flies near a drinking moth, the moth flies away. The flower keeps the nectar that is left. The moth does not go back to that flower for some time.
+- **NGT-034** If a moth drank more than half of a moonflower, the flower is worth 1 less.
+- **NGT-035** Moths go to light. A bee with a firefly tail (3 or more fireflies) pulls near moths away from the flowers. The moths fly around the bee. When the light goes, the moths go back to the flowers.
+- **NGT-036** Add `?moths=0` to the address (or `#moths-off`) to switch off the moths. Then the night must be as before.
+- **NGT-037** Moths are guides. A moth that has drunk a flower dry flies to the nearest night bloom that is still shut and that no other moth has chosen. It flies faster than a moth that looks for flowers (8.5 against 4.6) and leaves wing dust in the air, which the bee can follow for approximately 8 seconds. A bee near it or a firefly tail must not turn it from its way. The bat must not take it.
+- **NGT-038** A night bloom is a hidden flower with a lilac edge. It is a shut bud and gives nothing until its moth lands on it. Then it opens and glows. It opens for no one else. A message tells this if the bee is near.
+- **NGT-039** An open night bloom gives nectar worth 3 (worth 4 on the highest hill), one time a night. The moth sits on its bloom for the remainder of the night. When the bee comes to drink, the moth lifts off, and then it sits down again.
+- **NGT-040** There are four night blooms at fixed places outside the locked zones: on the fallen tree, on the widest mushroom, behind the top of the highest hill and behind the top of the hill by the walled garden. Each night all four start shut. They are not shown in the day or on a night without moths.
+- **NGT-041** The bat comes from the third night, after the moon is up. There is one bat. On the first two nights no bat comes.
+- **NGT-042** The bat flies one fixed round in the open air over the eastern meadow, 40 to 50 above the ground. One round is approximately 53 seconds. The bat comes past the same place again after the same time. On its round the bat makes no sound that the bee can hear.
+- **NGT-043** At night, from the third night, the air more than 40 above the ground belongs to the bats. This limit is above most treetops and well above the hive door. When the bee flies higher than the limit in the open, a bat hears it: a squeak of two notes sounds, and a message tells the player to go down. Then the bee hears echolocation calls. The calls come faster and louder while a bat comes nearer in circles. After approximately 6 seconds the calls run together and the bat dives. When the bee is 40 or more above the limit, this time is 3 seconds. The bat catches the bee. Then the bee wakes up in its cell at home, and the pollen that it carried is lost. There is no other penalty. The night continues. (The owner, 2026-11-22: "actually very dangerous"; "It'll start with a squeak, then the echolocation noises, and they'll get louder and louder until he gets you".)
+- **NGT-044** A bee that stays below the limit is safe all night, at any speed. Within 60 of the hive tree, the bee is safe at any height. In the daytime the bats do not hunt.
+- **NGT-045** If the bee goes down below the limit, the calls become slower and quieter. After a maximum of 2.5 seconds below the limit, the bat has lost the bee and turns away. If the bee goes up again before that, the hunt continues from where it was. A bee that gets below the limit during the last dive is not caught.
+- **NGT-046** After the middle of the night, the bat takes one moth. It takes no more than one moth each night.
+- **NGT-047** Add `?bat=0` to the address (or `#bat-off`) to switch off the bat. Then the night must be as before.
+- **NGT-048** To try a part at once: with `#night-now` the day starts at dusk, so the night comes soon; with `#moths-now` and `#bat-now` the moths and the bat come on any night (not only from the second or third night). Not approved by the owner yet.
 
 ## 12. Tests
 
@@ -186,15 +211,53 @@ Not approved by the owner yet.
 - **MOD-002** Each file in `src/` has one subject. The first line of each file is a `// Honeylight: ...` line that says what is in the file. `src/README.md` has a table of the files.
 - **MOD-003** `src/core.js` and `src/world.js` are the base modules. `core.js` must not import from `src/`. `world.js` must import only from `core.js`.
 - **MOD-004** A function name must say what the function does. Do not use the name of a build round or a batch in a function name.
-- **MOD-005** The night stays in separate files (`night.js`, `moonflowers.js`). Files in `src/` must not import them. One switch (`?night=0`) turns off all of the night (NGT-026).
+- **MOD-005** The night stays in separate files (`night.js`, `moonflowers.js`, `moths.js`, `moth-model.js`, `bat.js`, `bat-model.js`). Files in `src/` must not import them. One switch (`?night=0`) turns off all of the night (NGT-026). The storm also stays in separate files (`storm.js`, `storm-view.js`). `storm.js` decides when and where it rains; `storm-view.js` only draws. It talks to the game through `window.__g` and a few hooks tagged "storm.js" in `src/`. One switch (`?storm=0`) turns it off (STM-009).
 - **MOD-006** A move or a rename of code must not change the game. After the change, all tests must pass and all screenshots must match pixel for pixel without `--update`.
 - **MOD-007** Do not put a `//` comment in a one-line function or loop. Use `/* */`.
 - **MOD-008** A name that one module declares must be changed only in that module. Other modules can only read it.
 - **MOD-009** A new load-time step goes at the end of `main.js`. Put it in a different place only if the tests show that the place is safe (MOD-006).
 - **MOD-010** Do not remove or rename a key of `window.__g`. Tests and tools use these keys.
 
+## 14. The storm
+
+Not approved by the owner yet.
+
+On some afternoons the air goes still, a dark cloud comes over from beyond the flower field, and a band of rain crosses the land toward the hive. The bee flies home ahead of it or waits under a roof. When the rain has passed, the flowers are full again and a rainbow stands on the meadow. The storm is in `storm.js` (what happens) and `storm-view.js` (what it looks like).
+
+- **STM-001** There is no storm on the first three days. On day 4, 7, 10 (every third day from day 4), a storm starts to brew when two fifths of the afternoon are gone. There is one storm a day at most. A message and the time of day say that a storm is coming.
+- **STM-002** While the storm brews, the air goes still. Then the wind rises and blows from the storm. The light starts to go. The flowers shut before the first rain, and a shut flower gives no pollen. The first rain falls at the far edge of the land about 35 seconds after the storm starts to brew.
+- **STM-003** The rain is a band. It moves toward the hive side at 16 each second. It reaches the far field first and rains about 35 seconds at each place.
+- **STM-004** A bee cannot fly in rain. In open rain the wings soak in approximately 4 seconds. Soaked wings give little lift and little speed: the bee comes down. It can walk on the ground, and with the rise key it can flutter as high as the grass tops (approximately 8), so that the player can see where a roof is. No pollen is lost. Messages tell the rule at the first rain and when the bee is down. Over the pond the wings must stay light enough (0.45 at most) to reach the shore. (The owner chose "Rain grounds you" on 2026-11-22. This replaces the pollen that washed out.)
+- **STM-005** Under a roof the bee stays dry and keeps its pollen. The roofs are: the hive, the crown of the hive tree, a tree, a mushroom, the old fallen tree and the bramble hollow.
+- **STM-006** When the rain has passed, the flowers open and are full again, and the light and the wind come back. A rainbow stands for about 75 seconds. Then no trace of the storm is left.
+- **STM-007** One foot of the rainbow stands on a flower of the field. Near the foot, the next harvests are worth 1 more, at most 5 times.
+- **STM-008** In the storm the wasps stay in and no flower overflows. Lightning is light and sound only: it never falls near the bee and takes nothing.
+- **STM-009** Add `?storm=0` to the address (or `#storm-off`) to switch off the storm. With `#storm-now` (or `?storm=1`) a storm starts 15 seconds after the bee first flies out.
+- **STM-010** On a day without a storm, the game must play exactly as with the storm switched off (the same positions and the same random numbers). The storm never calls `Math.random` while there is no storm, and it shows nothing then.
+- **STM-011** Soaked wings dry in approximately 2.5 seconds under a roof. Then the bee can fly again, so it can go from roof to roof in short flights. The wings also dry when the rain has passed and when the storm is over.
+
+## 15. The try-out menu
+
+The owner asked for this menu on 2026-11-22 ("a menu that picks the stage, and a checkbox that enables all zones"). The stage list and the details below are a first version: not approved by the owner yet.
+
+- **TRY-001** The page must show a small menu at the top right, in a file of its own (`stage-menu.js`). It has a list of stages and a checkbox for the zones. The menu is not for players: it shows only when the address has `?menu=1` (or `#menu-on`, for a page that does not keep the `?` part). Without one of these, the menu is not there. (Changed 2026-11-22: The owner said that the menu must not be for everyone.) A menu that is not used must not change the game.
+- **TRY-002** The list has these stages: afternoon; storm (it starts to brew, the rain is close, the rain has just passed); dusk; night 1 (moonflowers and fireflies), night 2 (two moths), night 3 (three moths and the bat), night 4 (four moths and the bat). When the player picks a stage, that stage starts at once. If the bee has not hatched yet, the hatching is skipped and the bee is in the air outside the hive. A night stage sets the day to its number (night 3 is day 3). A storm stage sets the day to a storm day (day 4, 7, 10: the first one that is not before the current day). Afternoon and dusk keep the day. (Changed 2026-11-22: The owner said that the jumps must not stay on day 1.)
+- **TRY-003** The player can pick each stage from each other stage. A night or a storm that is in progress ends first. While the end-of-day card shows, a pick does nothing and a hint says so.
+- **TRY-005** The menu has a day field. It shows the current day. When the player types a day number, the game goes to the afternoon of that day, and the save keeps that day. What belongs to that day then comes by itself (the storm on a storm day, the moths and the bat at night).
+- **TRY-004** The checkbox opens all zones (the walled garden, the lily pond, the forest edge) and spends no honey. It stays on after a reload. When the player clears it, the zones go back to what they were before.
+
 ## Change log
 
+- 2026-11-22: TRY-001: the try-out menu is hidden unless the address has `?menu=1` or `#menu-on` (it was shown to everyone, with `#menu-off` to hide it).
+
+- 2026-11-22: The owner chose "Rain grounds you". STM-004 changed (soaked wings bring the bee down; no pollen is lost), STM-005 names the fallen tree, added STM-011 (wings dry under a roof).
+- 2026-11-22: The bat is dangerous (the owner's request). NGT-042 to NGT-045 changed: the bat no longer clips a fast bee in low air; a bee above the limit of 40 is heard, hunted with a squeak and calls that grow, and taken home.
+- 2026-11-22: Added GFX-008 (the mound over the night grove is a bramble thicket). The owner chose this look.
+- 2026-11-22: The owner's play-test notes. Added CAM-006 (the game starts with the camera outside the bee), HIV-015 (the waddle on the comb), GFX-007 (the old log is a fallen tree) and NGT-037 to NGT-040 (moths as guides to hidden night blooms). NGT-032 changed: a fed moth drinks no more that night.
+- 2026-11-22: TRY-002 changed and TRY-005 added: the stage jumps set the day number, and the menu has a day field (the owner: the controls stayed on day 1).
+- 2026-11-22: Added section 15 (the try-out menu, TRY-001 to TRY-004) at the owner's request. The moths and the bat now take their night number from `NIGHT.nightNo()` so that the menu can show a later night and not change the day number.
+- 2026-11-22: Added section 14 (the storm, STM-001 to STM-010) and NGT-048 (the try-it switches). MOD-005 now lists the storm files. Not approved by the owner yet.
+- 2026-11-22: Added NGT-031 to NGT-036 (moths) and NGT-041 to NGT-047 (the bat). NGT-026 and MOD-005 now list the moth and bat files. Not approved by the owner yet.
 - 2026-11-22: Added MOD-001 to MOD-010 (code structure after the module split). Not approved by the owner yet.
 - 2026-11-22: Added NGT-001 to NGT-030 (the night: moon, moonflowers, fireflies, the hollow grove) and TST-001 to TST-009 (tests). ZON-004 and ZON-005 now happen at moonset (NGT-025). Not approved by the owner yet.
 - 2026-11-22: Removed FLW-007 and WSP-014 (hunter path undone at the owner's request).

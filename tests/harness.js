@@ -46,6 +46,7 @@ function initScript(seed) {
 async function launch() { return chromium.launch({ args: ARGS }); }
 
 // open a fresh game. opts: { dir, seed, storage: {key: value}, query: '?mp=0' }
+// The tests look through the bee's eyes (view '1') unless a test asks for another view: storage { 'honeylight.view': null } gives a new player's game.
 async function openGame(browser, opts = {}) {
   const ROOT = path.resolve(opts.dir || path.join(__dirname, '..'));
   const ctx = await browser.newContext({ viewport: VIEW, deviceScaleFactor: 1 });
@@ -57,7 +58,7 @@ async function openGame(browser, opts = {}) {
     r.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
   await page.addInitScript(initScript, opts.seed === undefined ? 12345 : opts.seed);
   const nh = path.join(__dirname, 'night-helpers.js'); if (fs.existsSync(nh)) await page.addInitScript({ path: nh }); // autoFly(), for night tests and shots
-  if (opts.storage) await page.addInitScript(st => { for (const k in st) localStorage.setItem(k, st[k]); }, opts.storage);
+  await page.addInitScript(st => { for (const k in st) if (st[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, st[k]); }, { 'honeylight.view': '1', ...(opts.storage || {}) });
   await page.goto('http://hl.local/index.html' + (opts.query || ''));
   await page.waitForFunction(() => window.__g, null, { timeout: 180000, polling: 250 });
   return { page, ctx, errors, close: () => ctx.close() };

@@ -1,11 +1,15 @@
 // Honeylight: the night. The moon, moonflowers, fireflies and the hollow that wakes.
-// Self-contained. To switch it off add ?night=0 to the address (or #night-off, for pages that drop the ? part). To remove it, delete this file's <script> tag in index.html.
+// Self-contained. To switch it off add ?night=0 to the address (or #night-off, for pages that drop the ? part).
+// More night life lives in files of their own and joins through NIGHT.parts: moths.js. To remove it, delete this file's <script> tag in index.html.
 // It talks to the game only through window.__g and the small NIGHT hooks in main.js (search main.js for "NIGHT").
 // It never calls Math.random and never shows anything in the daytime, so with the night switched on
 // the day plays and looks exactly as before.
 import { makeMoonflowers } from './moonflowers.js';
 const g = window.__g;
-if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off') {
+// a part of the night is off when the address has ?name=0, or name-off after the # (for pages that drop the ? part)
+const off = name => new RegExp('[?&]' + name + '=0').test(location.search) || location.hash.includes(name + '-off');
+const now = name => new RegExp('[?&]' + name + '=1').test(location.search) || location.hash.includes(name + '-now'); // to try a part at once: #night-now, #moths-now, #bat-now
+if (g && !off('night')) {
   const { THREE, P, G, DAY, U, scene, terrainH, flowers, HOLLOW, PR } = g, V3 = THREE.Vector3, TAU = Math.PI * 2;
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x)), lerp = (a, b, t) => a + (b - a) * t;
   const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -15,7 +19,8 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
   // three.js draws a random id for every new object. While this file builds its objects, those draws come from our own
   // numbers, so the game's random stream is the same with or without the night.
   const _mathRandom = Math.random; Math.random = rnd;
-  const N = window.NIGHT = { active: false, done: false, t: 0, k: 0, LEN: 240, n: 0, sleepT: 0, groveLit: false, chain: null, tail: 0, keepTail: false, chains: 0, warned: false };
+  const N = window.NIGHT = { active: false, done: false, t: 0, k: 0, LEN: 240, n: 0, sleepT: 0, groveLit: false, chain: null, tail: 0, keepTail: false, chains: 0, warned: false,
+    off, now, parts: [], tryNight: 0 }; // parts: more night life in files of their own (moths.js ...). Each is { start(), update(dt, flying), finish() }
 
   // =====================================================================================
   // 1. The sky: dusk hands over to the moon. The moon's climb and fall is the night's clock.
@@ -42,7 +47,7 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
   // =====================================================================================
   const MF = N.moonflowers = [];
   const HGY = terrainH(HOLLOW.x, HOLLOW.z);
-  function addMF(x, z, h, o = {}) { const y = terrainH(x, z) + h; MF.push({ x, z, y, sx: x, sz: z, dsx: 0, dsz: 0, ax: 0, az: 0, r: o.r || 1.3, len: o.len || 3.2, tilt: 0.32, sw: 1, val: o.val || 2, grove: !!o.grove, lily: true, rich: 0, cool: 0, open: 0, taken: false, stem: h, ph: rnd(TAU) }); }
+  function addMF(x, z, h, o = {}) { const y = terrainH(x, z) + h; MF.push({ x, z, y, sx: x, sz: z, dsx: 0, dsz: 0, ax: 0, az: 0, r: o.r || 1.3, len: o.len || 3.2, tilt: 0.32, sw: 1, val: o.val || 2, grove: !!o.grove, lily: true, rich: 0, cool: 0, open: 0, taken: false, nectar: 1, stem: h, ph: rnd(TAU) }); }
   {
     const Z = Object.values(g.ZONES), bad = (x, z) => { const d = Math.hypot(x, z);
       if (d < 55 || d > 300 || terrainH(x, z) < g.WY + 2) return true;
@@ -67,7 +72,7 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
     const time = g.time;
     for (let i = 0; i < MF.length; i++) { const f = MF[i];
       const want = f.grove ? (N.groveLit ? 1 : 0) : smooth(0.45 + (i % 5) * 0.06, 0.8 + (i % 5) * 0.04, N.k) * (N.t < 0.97 ? 1 : 0);
-      f.open += clamp(want - f.open, -dt * 0.5, dt * 0.45); mfView.setOpen(i, f.open, f.taken ? 0.25 : 1);
+      f.open += clamp(want - f.open, -dt * 0.5, dt * 0.45); mfView.setOpen(i, f.open, f.taken ? 0.25 : 0.35 + 0.65 * f.nectar); /* a flower that a moth drinks from grows dim */
       if (!flying) continue;
       const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (d > 12) continue;
       if (f.open < 0.3) { // a shut bud is slim: only its stem is in the way
@@ -78,8 +83,9 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
         const need = f.val >= 4 ? 1.6 : 1.1;
         if (time - (f.lastLand || -9) > 0.5) G.holdT = 0; f.lastLand = time; G.holdT += dt; G.holdF = f; G.holdNeed = need;
         if (rnd() < dt * 7) { _v.set(f.sx + rnd(-0.7, 0.7), f.y + 1, f.sz + rnd(-0.7, 0.7)); g.puff(_v, 1, [0.75, 0.9, 1.0], 0.6, 0.009, 0.8, 0.3, 0.6); }
-        if (G.holdT >= need) { G.holdT = 0; f.taken = true; f.cool = 1e9; P.load.push(f.val); P.pollen = P.load.length;
-          g.toast(f.grove ? `<b>Moonflower nectar</b> worth ${f.val} honey` : `<b>A moonflower</b> worth ${f.val} honey`, 3);
+        if (G.holdT >= need) { const half = f.nectar < 0.5, val = half ? Math.max(1, f.val - 1) : f.val; /* a moth drank most of it */
+          G.holdT = 0; f.taken = true; f.cool = 1e9; P.load.push(val); P.pollen = P.load.length;
+          g.toast(f.grove ? `<b>Moonflower nectar</b> worth ${val} honey` : half ? `<b>A moonflower</b>, half drunk by a moth: worth ${val} honey` : `<b>A moonflower</b> worth ${val} honey`, 3);
           chime(2 + Math.min(5, P.pollen), 0.11); _v.set(f.sx, f.y + 0.8, f.sz); g.puff(_v, 22, [0.8, 0.92, 1.0], 2.0, 0.012, 1.6, 0.5, 0.8);
           if (P.pollen >= G.cap) g.hint('baskets full: take it home to the hive', 4); }
       }
@@ -227,7 +233,7 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
       fCol[i * 4] = FLY_C[0] * b; fCol[i * 4 + 1] = FLY_C[1] * b; fCol[i * 4 + 2] = FLY_C[2] * b; fCol[i * 4 + 3] = 0; fSize[i] = b > 0.02 ? q.size * (0.8 + 0.25 * Math.min(2, b)) : 0;
     }
     // a soft halo on every open moonflower: these are what you steer by in the dark
-    for (let i = 0; i < HN; i++) { const f = MF[i], j = FN + i, o = f.open * N.fade * (f.taken ? 0.3 : 1) * (0.85 + 0.15 * Math.sin(time * 1.4 + f.ph));
+    for (let i = 0; i < HN; i++) { const f = MF[i], j = FN + i, o = f.open * N.fade * (f.taken ? 0.3 : 0.4 + 0.6 * f.nectar) * (0.85 + 0.15 * Math.sin(time * 1.4 + f.ph));
       fPos[j * 3] = f.sx; fPos[j * 3 + 1] = f.y + 0.9; fPos[j * 3 + 2] = f.sz; fCol[j * 4] = 0.42 * o; fCol[j * 4 + 1] = 0.60 * o; fCol[j * 4 + 2] = 1.0 * o; fCol[j * 4 + 3] = 1; fSize[j] = o > 0.02 ? (f.grove ? 2.6 : 4.2) : 0; }
     fGeo.attributes.position.needsUpdate = fGeo.attributes.aC.needsUpdate = fGeo.attributes.aS.needsUpdate = true;
     // the tail is a travelling light: it shows the ground and the way home
@@ -240,14 +246,16 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
   // =====================================================================================
   function start() {
     N.active = true; N.t = 0; N.k = 0; N.n++; N.sleepT = 0; N.groveLit = false; N.chain = null; N.tail = 0; N.keepTail = false; N.warned = false; N.passes = 0; hist.length = 0; hasPrev = false;
-    for (const f of MF) { f.open = 0; f.taken = false; f.cool = 0; }
+    for (const f of MF) { f.open = 0; f.taken = false; f.cool = 0; f.nectar = 1; f.drained = false; }
     for (const R of ROUTES) { R.state = 'asleep'; R.k = 0; R.cool = 0; for (const q of R.flies) { q.role = 1; q.b = 0; q.bt = q.vis ? 1 : 0; q.hr = 2.2; q.T = 0; q.home.copy(R.start).add(_v.set(rnd(-4, 4), rnd(-2, 2.5), rnd(-4, 4))); q.p.copy(q.home); q.v.set(0, 0, 0); } }
     for (const q of loose) { q.role = 1; q.b = 0; q.bt = 1; q.p.copy(q.home); } for (const q of groveFlies) { q.role = 1; q.b = 0; q.bt = 0; q.p.copy(q.home); }
     fPts.visible = true; mfView.group.visible = true;
     g.toast(g.inHive ? '<b>Night falls</b><br><span>the moon is rising and moonflowers open in the dark. Rest here to sleep until morning</span>' : '<b>Night falls</b><br><span>the moon is rising and moonflowers open in the dark</span>', 7);
     g.tone(196, 0.06, 4); g.tone(293.66, 0.05, 4, 'sine', 0.5);
+    for (const p of N.parts) if (p.start) p.start();
   }
   function finish() {
+    for (const p of N.parts) if (p.finish) p.finish(); N.tryNight = 0;
     for (const R of ROUTES) R.state = 'asleep'; N.chain = null; N.tail = 0;
     N.active = false; N.done = true; U.uNight.value = 0; U.uLamp.value.w = 0; N.lamp = 0; fPts.visible = false; mfView.group.visible = false; g.applyDayLight();
     for (const q of F) if (q.role) { q.role = 1; q.b = 0; q.T = 0; }
@@ -265,6 +273,7 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
     if (!g.MOB.active && !g.SWARM.active) for (const w of g.wasps) w.gone = Math.max(w.gone || 0, 0.6);
     g.MOB.next = Math.max(g.MOB.next, 20); G.richT = Math.max(G.richT, 6); g.NESTR.cd = Math.max(g.NESTR.cd, 3);
     moonflowers(dt, flying); chains(dt, flying); flies(dt);
+    for (const p of N.parts) if (p.update) p.update(dt, flying);
     _prev.copy(P.pos); hasPrev = flying;
     // the tail leaves at the hive door
     if (g.inHive && N.tail > 0) { for (const R of ROUTES) for (const q of R.flies) if (q.role === 4) { q.role = 1; q.home.copy(q.p); q.bt = 0; } N.tail = 0; N.keepTail = false; }
@@ -280,6 +289,9 @@ if (g && !/[?&]night=0/.test(location.search) && location.hash !== '#night-off')
   function cardText() { const d = card && card.firstChild; if (d && d.innerHTML.includes('Night falls on day')) { N.moonset = false; d.innerHTML = d.innerHTML.replace('Night falls on day', 'The moon sets on day'); } else if (DAY.t < 0.5) N.moonset = false; }
 
   // for tests and for looking around: jump into the night
-  N.debug = { begin(t = 0.3, settle = 12) { DAY.t = 1; g.sim(0.1); N.t = t; N.k = 1; for (const f of MF) if (!f.grove) f.open = 1; g.sim(settle); }, F, MF, ROUTES, hist };
+  // which night this is for the moths and the bat: the day's number, or the night picked in the try-out menu (stage-menu.js)
+  N.nightNo = () => N.tryNight || DAY.n;
+  N.debug = { end() { if (N.active) finish(); N.moonset = false; }, begin(t = 0.3, settle = 12) { DAY.t = 1; g.sim(0.1); N.t = t; N.k = 1; for (const f of MF) if (!f.grove) f.open = 1; g.sim(settle); }, F, MF, ROUTES, hist };
+  if (now('night')) DAY.t = Math.max(DAY.t, 0.96); // #night-now: the day starts at dusk, so the night comes after about 20 seconds of flying
   Math.random = _mathRandom;
 }

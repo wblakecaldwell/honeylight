@@ -55,6 +55,30 @@ module.exports = [
       return { third0, ...r, kept, back };
     } },
 
+  { id: 'CAM-006-outside-first', req: 'CAM-006', name: 'A new game starts with the camera outside the bee. The hatching stays in the cell. V changes to the bee\'s eyes and the game keeps that',
+    async run(t) {
+      await t.reopen({ storage: { 'honeylight.view': null } });
+      const a = await t.ev(() => { const g = __g, o = { third: g.G.third, stored: localStorage.getItem('honeylight.view') }; T.sim(0.5); o.title = [g.P.mode, g.camDist, g.me.s.x < 0.01];
+        T.fly(150, 30, 40); T.quiet(); T.key('KeyW'); T.sim(2); T.key('KeyW', false); o.dist = +g.camDist.toFixed(2); o.seen = g.me.s.x === 1; o.behind = +g.camera.position.distanceTo(g.P.pos).toFixed(2);
+        g.P.flownAt = g.time - 11; T.sim(0.5); o.tip = T.text('hint'); return o; });
+      t.eq([a.third, a.stored], [true, null], 'no stored choice: the view is from outside'); t.eq(a.title, ['title', 0, true], 'in the cell the camera is in the bee and the bee model is not drawn');
+      t.check(a.dist > 0.7 && a.seen && a.behind > 2.5, `in flight the camera is ${a.behind} behind the bee and the bee is drawn`); t.check(/bee's eyes/.test(a.tip), 'the V tip tells of the other view: ' + a.tip);
+      await t.page.keyboard.press('KeyV'); const v = await t.ev(() => ({ third: __g.G.third, view: localStorage.getItem('honeylight.view') })); t.eq(v, { third: false, view: '1' }, 'V changes to the bee\'s eyes and stores it');
+      await t.reopen({ storage: { 'honeylight.view': '1' } }); t.eq(await t.ev(() => __g.G.third), false, 'kept after a reload'); return { a, v };
+    } },
+
+  { id: 'HIV-015-waddle', req: 'HIV-015', name: 'Seen from outside, the bee waddles when it walks on the comb: its body swings left and right. It is still when it stands',
+    async run(t) {
+      await t.reopen({ storage: { 'honeylight.view': null } }); await t.page.click('#title');
+      const r = await t.ev(() => { const g = __g, P = g.P, V = g.THREE.Vector3; let n = 0; while (P.mode === 'cell' && n < 40) { g.chew(); T.sim(0.2); n++; } T.sim(6);
+        const swing = () => { const f = new V(0, 0, 1).applyQuaternion(g.me.q); return f.x * P.cdir.y - f.y * P.cdir.x; }; /* how far the body points to the side of the way it walks */
+        const o = { mode: P.mode, seen: g.me.s.x === 1, still: +Math.abs(swing()).toFixed(3) }; T.key('KeyW'); let lo = 0, hi = 0, flips = 0, last = 0; const y0 = P.pos.y;
+        for (let i = 0; i < 120; i++) { T.sim(1 / 60); const s = swing(); lo = Math.min(lo, s); hi = Math.max(hi, s); if (s * last < 0) flips++; if (s) last = s; }
+        o.left = +lo.toFixed(3); o.right = +hi.toFixed(3); o.flips = flips; o.walked = +(P.pos.y - y0).toFixed(1); T.key('KeyW', false); T.sim(1.5); o.stopped = +Math.abs(swing()).toFixed(3); return o; });
+      t.eq([r.mode, r.seen], ['crawl', true], 'on the comb, seen from outside'); t.eq(r.still, 0, 'a standing bee points straight'); t.check(r.left < -0.05 && r.right > 0.05, `walking, the body swings to both sides (${r.left} to ${r.right})`);
+      t.check(r.flips >= 6 && r.flips <= 16, 'about three swings a second, as the sisters: ' + r.flips + ' changes of side in 2 s'); t.check(r.walked > 2.5, 'it walks on: ' + r.walked); t.check(r.stopped < 0.005, 'it is still again after it stops: ' + r.stopped); return r;
+    } },
+
   { id: 'GFX-006-old-look', req: 'GFX-006', name: 'The game loads and flies with ?mp=0 (the old look)', open: { query: '?mp=0' },
     async run(t) {
       const r = await t.ev(() => { T.fly(150, 30, 40); T.quiet(); T.key('KeyW'); T.sim(2); T.key('KeyW', false); __g.snap(); return { mp: !!__g.MP, flowers: __g.flowers.length, moved: +(__g.P.pos.distanceTo(new __g.THREE.Vector3(150, 30, 40))).toFixed(1) }; });

@@ -47,6 +47,18 @@ module.exports = [
       return r;
     } },
 
+  { id: 'GFX-008-bramble', req: 'GFX-008', name: 'The mound over the night grove is a bramble thicket: leaves, arching thorny canes, blackberries; nothing of it hangs in the grove',
+    async run(t) {
+      const r = await t.ev(() => { const g = __g, H = g.HOLLOW, L = g.HOL, gy = L.gy; let leavesIn = 0, leavesOut = 0, top = 0, im = null;
+        g.scene.traverse(o => { if (o.isInstancedMesh && o.count === L.leaves && !im) im = o; });
+        const m = im.instanceMatrix.array; for (let i = 0; i < im.count; i++) { const sx = Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2]); if (sx < 0.01) continue; const x = m[i * 16 + 12], y = m[i * 16 + 13], z = m[i * 16 + 14], d = Math.hypot(x - H.x, z - H.z);
+          if (d < H.r - 2 && y < gy + 8) leavesIn++; else leavesOut++; top = Math.max(top, y - gy); }
+        return { berries: L.berries, canes: L.canes, leavesIn, leavesOut, top: +top.toFixed(1) }; });
+      t.check(r.leavesOut > 1500, 'leaves cover the thicket: ' + r.leavesOut); t.eq(r.leavesIn, 0, 'no leaves hang in the grove');
+      t.check(r.canes >= 30, 'arching canes: ' + r.canes); t.check(r.berries >= 100, 'blackberries: ' + r.berries); t.check(r.top > 16 && r.top < 24, 'the leaves stay close to the solid roof (top ' + r.top + ')');
+      return r;
+    } },
+
   { id: 'CHL-007-gust', req: 'CHL-007', name: 'A petal gust carries the bee along with it',
     async run(t) {
       const r = await t.ev(() => { const g = __g, P = g.P, GU = g.GUSTS[0]; T.fly(150, 30, 40); T.quiet(); GU.next = 1e9; g.GUSTS[1].next = 1e9;

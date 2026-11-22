@@ -18,6 +18,7 @@ void main(){ vec3 dir=normalize(vL); float e=dir.y;
   vec3 c=mix(hz,zen,pow(clamp(e,0.,1.),0.5));
   float sd=max(dot(dir,uSun),0.);
   vec3 glowC=vec3(1.5,0.85,0.35), discC=vec3(30.,22.,12.);
+  float sk=0.0; if(uStorm.w>0.001){ float sd2=dot(dir.xz/(abs(dir.y)+0.14)*1.3,uStorm.xy); sk=uStorm.w*smoothstep(uStorm.z-1.3,uStorm.z+1.3,sd2)*(1.0-smoothstep(uStorm2.x-1.3,uStorm2.x+1.3,sd2)); glowC*=1.0-sk; discC*=1.0-sk; }
   if(uNight>0.001){ glowC=mix(glowC,vec3(0.10,0.13,0.22),uNight); vec2 mq=dir.xz*40.0+dir.y*17.0; discC=mix(discC,vec3(5.2,5.6,6.4)*(0.72+0.5*fbm(mq)),uNight);
     vec3 sp=dir*210.0; vec3 si=floor(sp); float sh=hash21(si.xy+si.z*17.13); float sr=length(fract(sp)-0.5-(vec3(hash21(si.yz+1.7),hash21(si.zx+5.1),hash21(si.xy+9.3))-0.5)*0.6);
     float star=step(0.972,sh)*smoothstep(0.13,0.02,sr)*(0.55+0.45*sin(uTime*(1.0+sh*3.0)+sh*90.0));
@@ -29,6 +30,7 @@ void main(){ vec3 dir=normalize(vL); float e=dir.y;
   vec3 cloudC=mix(vec3(0.78,0.66,0.72), vec3(1.9,1.25,0.7), pow(sd,3.0))*(0.7+0.35*thick);
   cloudC+=vec3(2.2,1.2,0.5)*pow(sd,12.0)*(1.0-thick)*1.2;
   if(uNight>0.001) cloudC=mix(cloudC,(vec3(1.5,1.6,1.9)+vec3(3.5,3.7,4.2)*pow(sd,6.0)*(1.0-thick))*(0.6+0.4*thick),uNight);
+  if(sk>0.0){ float deck=smoothstep(0.18,0.52,fbm(cu*0.55+uTime*0.012))*smoothstep(-0.02,0.10,e); cl=mix(cl,max(cl,deck),sk); cloudC=mix(cloudC,vec3(0.105,0.112,0.13)*(0.5+0.9*thick),sk); }
   c=mix(c, cloudC*uHaze, cl*0.85);
   // the sky's light pattern: a faint pearly shimmer standing over home, the way bees read polarized light
   float hd=max(dot(normalize(dir.xz+vec2(1e-5)),uHome.xz),0.0); float band=pow(hd,30.0)*smoothstep(0.0,0.05,e)*smoothstep(0.9,0.12,e);
@@ -66,9 +68,9 @@ export function applyDayLight() {
   const dusk = smooth(9, -3, e); U.uAmb.value = 1 - 0.45 * dusk; U.uHaze.value.set(1 - 0.4 * dusk, 1 - 0.55 * dusk, 1 - 0.25 * dusk);
   U.uClose.value = smooth(0.86, 0.97, DAY.t); DAY.expo = 1 + 0.5 * dusk;
 }
-export const flowersClosed = () => DAY.t > 0.93;
+export const flowersClosed = () => DAY.t > 0.93 || !!(window.STORM && STORM.closed); // storm.js shuts the flowers before the rain
 export function dayCount(v) { DAY.honey += v; return v; }
-export function timeOfDay() { if (window.NIGHT && NIGHT.active) return NIGHT.label(); const t = DAY.t; return t < 0.35 ? 'afternoon' : t < 0.62 ? 'late afternoon' : t < 0.78 ? 'evening' : t < 0.9 ? 'the sun is low: stock the hive' : 'dusk: flowers closing, head home'; }
+export function timeOfDay() { if (window.NIGHT && NIGHT.active) return NIGHT.label(); if (window.STORM && STORM.on && STORM.label()) return STORM.label(); const t = DAY.t; return t < 0.35 ? 'afternoon' : t < 0.62 ? 'late afternoon' : t < 0.78 ? 'evening' : t < 0.9 ? 'the sun is low: stock the hive' : 'dusk: flowers closing, head home'; }
 export function updateDay(dt) {
   if (DAY.ending > 0) { dayEnd(dt); return; }
   if (P.mode === 'fly' || P.mode === 'crawl') DAY.t += dt / DAY.LEN;

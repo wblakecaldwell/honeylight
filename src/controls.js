@@ -71,7 +71,7 @@ export function tipsTick() {
   if (P.mode === 'title') { keytipEl.style.opacity = 0; return; }
   keytipEl.style.opacity = keysEl.classList.contains('on') ? 0 : 0.5;
   if (P.mode !== 'fly') return;
-  if (P.flownAt && time - P.flownAt > 10 && !G.third) tipOnce('v', '<kbd>V</kbd> see yourself from behind', 5);
+  if (P.flownAt && time - P.flownAt > 10) tipOnce('v', G.third ? '<kbd>V</kbd> see through the bee\'s eyes' : '<kbd>V</kbd> see yourself from behind', 5);
   if (P.pollen > 0 && !G.third && TIPS.v && P.flownAt && time - P.flownAt > 20) tipOnce('v2', '<kbd>V</kbd> look back at the pollen on your legs', 5);
   if (G.workers >= 3 && !inHive && wasps.some(w => w.state === 'chase')) tipOnce('r', '<kbd>R</kbd> call your sisters to help', 5);
   if (G.heat > 0 && wasps.some(w => w.state !== 'idle' && w.p.distanceTo(P.pos) < 14)) tipOnce('f', '<kbd>F</kbd> blast the wasp with heat', 4);

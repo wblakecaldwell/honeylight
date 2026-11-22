@@ -84,7 +84,8 @@ export function collide(p, v) {
     if (t.blobs) for (const b of t.blobs) { const bx = p.x - b[0], by = (p.y - b[1]) * b[3] / b[4], bz = p.z - b[2], dd = Math.hypot(bx, by, bz), rr = b[3] * 1.02 + PR; if (dd < rr) { const k = rr / Math.max(dd, 0.01); p.x = b[0] + bx * k; p.y = b[1] + by * k * b[4] / b[3]; p.z = b[2] + bz * k; v.multiplyScalar(0.7); } } }
   { const A = LOG.axis, dx = p.x - LOG.c.x, dy = p.y - LOG.c.y, dz = p.z - LOG.c.z, u = dx * A.x + dy * A.y + dz * A.z;
     if (Math.abs(u) < LOG.len / 2 + PR) { const px = dx - A.x * u, py = dy - A.y * u, pz = dz - A.z * u, r = Math.hypot(px, py, pz);
-      if (r < LOG.ro + PR && r > LOG.ri - PR) { const t = r < (LOG.ri + LOG.ro) / 2 ? LOG.ri - PR : LOG.ro + PR, k = t / Math.max(r, 0.01); p.x = LOG.c.x + A.x * u + px * k; p.y = LOG.c.y + A.y * u + py * k; p.z = LOG.c.z + A.z * u + pz * k; } } }
+      const ro = LOG.ro * (1 + 0.25 * clamp((-u - LOG.len / 2 + LOG.foot) / LOG.foot, 0, 1) ** 2); // the trunk is wider at its root end
+      if (r < ro + PR && r > LOG.ri - PR) { const t = r < (LOG.ri + ro) / 2 ? LOG.ri - PR : ro + PR, k = t / Math.max(r, 0.01); p.x = LOG.c.x + A.x * u + px * k; p.y = LOG.c.y + A.y * u + py * k; p.z = LOG.c.z + A.z * u + pz * k; } } }
   archCollide(p, v);
   for (const s of STONES) { const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz); if (d < 8 && p.y < s.y + 0.4 + PR) { if (d > 6.5) { const k = 8 / Math.max(d, 0.01); p.x = s.x + dx * k; p.z = s.z + dz * k; } else { p.y = s.y + 0.4 + PR; v.y = Math.max(v.y, 0); } } }
   const tr = trunkR(p.y) + PR; if (rad < tr && p.y < 92) { const k = tr / Math.max(rad, 0.01); p.x *= k; p.z *= k; }
@@ -95,16 +96,18 @@ export function collide(p, v) {
 export let me;
 let _yflip;
 export function setupThirdPerson() {
-  try { G.third = localStorage.getItem('honeylight.view') === '3'; } catch (e) { G.third = false; }
+  try { G.third = localStorage.getItem('honeylight.view') !== '1'; } catch (e) { G.third = true; } // a new game starts with the camera outside the bee; V changes it and the choice is kept
   me = newBee(1); me.s.set(0.001, 0.001, 0.001);
   _yflip = new Q4().setFromAxisAngle(YA, Math.PI);
   me.update = () => { const on = G.third && camDist > 0.7 && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6, P.yaw, P.roll * 1.3)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.6, -1.2, 1.2); me.fly = P.mode === 'fly'; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
   P.cdir = new V3(0, 1, 0);
-  { const mu = me.update; me.update = (dt, t) => { mu(dt, t); if (P.mode === 'crawl') { orient(me.q, P.cdir, ZA); me.p.z -= 0.04; me.bank = 0; } const tg = P.pollen > 0 ? 0.5 + 0.75 * Math.min(1, P.pollen / G.cap) : 0; me.pol = lerp(me.pol || 0, tg, Math.min(1, (dt || 0) * 5)); }; }
+  // on the comb the bee waddles when it walks: the body swings from side to side, as the sisters do (P.wad and P.wadPh come from loop.js)
+  { const mu = me.update; me.update = (dt, t) => { mu(dt, t); if (P.mode === 'crawl') { orient(me.q, P.cdir, ZA); me.p.z -= 0.04; me.bank = 0; me.vel = null;
+      const k = P.wad || 0, ph = (P.wadPh || 0) * 1.8; if (k > 0.001) { me.q.multiply(_wq.setFromEuler(_meE.set(0, Math.sin(ph) * 0.085 * k, Math.sin(ph + 1.2) * 0.06 * k))); me.p.addScaledVector(_cz.set(P.cdir.y, -P.cdir.x, 0), Math.sin(ph) * 0.014 * k); } } const tg = P.pollen > 0 ? 0.5 + 0.75 * Math.min(1, P.pollen / G.cap) : 0; me.pol = lerp(me.pol || 0, tg, Math.min(1, (dt || 0) * 5)); }; }
   addEventListener('keydown', e => { if (e.code === 'KeyV' && !e.repeat) { G.third = !G.third; try { localStorage.setItem('honeylight.view', G.third ? '3' : '1'); } catch (er) { } hint(G.third ? 'view from behind &nbsp; <kbd>V</kbd> to switch back' : 'bee\'s-eye view', 2.5); } });
 }
 
-const _meE = new THREE.Euler(0, 0, 0, 'YXZ');
+const _meE = new THREE.Euler(0, 0, 0, 'YXZ'), _wq = new Q4();
 const _cp = new V3(), _cb = new V3(), _cd = new V3(), _cz = new V3();
 export let camQuiet = false, camDist = 0;
 function camBlocked(pt) { _cz.copy(pt); camQuiet = true; collide(_cz, _cd.set(0, 0, 0)); camQuiet = false; if (_cz.distanceToSquared(pt) > 0.0025) return true;

@@ -2,7 +2,7 @@
 import * as THREE from '../three.module.min.js';
 import { M4, Q4, V3, rnd, clamp, lerp, TAU } from './core.js';
 import { POND, WY, srnd, HEDGE_GAP_W, HEDGE_R, ORCH, HEDGE_GAPS, HEDGE_TUN, inHedgeGap, BROOK, HOLLOW, brookSeg,
-  brookD, terrainH, terrainBase, LOG, orchTrees, FOREST, forestTrees, PADS0 } from './world.js';
+  brookD, terrainH, terrainBase, hollowRootD, LOG, orchTrees, FOREST, forestTrees, PADS0 } from './world.js';
 import { scene, camera, untoneHex, MP, cloverGLSL, mat, simple, geoParts, ell, parts, pNext, puff } from './engine.js';
 import { barkMat } from './hive.js';
 import { _v, YA } from './bees.js';
@@ -134,27 +134,66 @@ export function setupOrchard() {
   }
 }
 
-// hollow fallen log: a tunnel you can fly through, with honeydew blossoms inside
+// hollow fallen tree: a tunnel you can fly through, with honeydew blossoms inside.
+// It must read as a tree that fell: bark like the standing trees, a splintered break at the crown end, roots at the other end, broken branch stubs.
+// The bee collides with the plain tube of world.js LOG; all else here is for the eye. No Math.random: the seeded world must not shift.
 let logMesh;
 export function setupLog() {
+  // three.js draws 4 random numbers for the id of each new object. The first log was 12 objects (48 numbers): take exactly those from the game's stream
+  // and build the tree with a stream of its own, so that all that comes after it in the world is as it was.
+  for (let i = 0; i < 48; i++) Math.random(); const gameRandom = Math.random; let rs = 20261122; Math.random = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296; };
   logMesh = new THREE.Group();
-  {
-    const outerM = mat(`void main(){ vec3 n=NORMAL; float a=atan(vL.z,vL.x); float rid=fbm(vec2(a*7.0,vL.y*0.25)); float fine=fbm(vec2(a*30.0,vL.y*1.3));
-    vec3 alb=mix(vec3(0.07,0.05,0.035),vec3(0.38,0.28,0.18),smoothstep(0.3,0.7,rid))*(0.7+0.6*fine);
-    alb=mix(alb,vec3(0.14,0.30,0.05),smoothstep(0.45,0.7,fbm(vec2(a*3.0,vL.y*0.1)+2.0))*smoothstep(-0.2,0.6,n.y));
-    gl_FragColor=vec4(finish(shade(alb,n,vW,0.03,0.0),vW),1.0); }`);
-    const innerM = mat(`void main(){ vec3 n=NORMAL; float a=atan(vL.z,vL.x); float g=fbm(vec2(a*5.0,vL.y*0.5));
+  const h1 = n => { const x = Math.sin(n * 127.1 + 3.7) * 43758.5453; return x - Math.floor(x); };
+  const wave = (a, k) => 0.5 + 0.25 * Math.sin(a * 3 + k) + 0.15 * Math.sin(a * 7 + k * 2.3) + 0.1 * Math.sin(a * 13 + k * 4.1); // 0..1, smooth around the trunk
+  const L = LOG.len, NA = 64, NL = 36, ROOT = -1;                                   // roots at the -axis end, the break at the +axis end
+  const up = YA.clone().applyQuaternion(new Q4().setFromUnitVectors(YA, LOG.axis).invert()), upA = Math.atan2(up.z, up.x); // the world's up, in the log's frame
+  const LOBES = [0, 1, 2, 3, 4].map(k => upA + (k + 0.5) / 5 * TAU + (h1(k) - 0.5) * 0.45);                       // where the big roots left the trunk
+  const lobe = a => { let m = 0; for (const b of LOBES) { const d = Math.atan2(Math.sin(a - b), Math.cos(a - b)); m = Math.max(m, Math.exp(-d * d / 0.2)); } return m; };
+  const jag = (a, s) => s === ROOT ? 0.2 + 0.7 * wave(a, 1.3) + 0.9 * lobe(a) : 0.6 + 4.2 * Math.pow(wave(a, 5.1), 1.6) + 1.1 * h1(Math.round(a * NA / TAU)); // how far the wood runs past the tube
+  const uAt = (t, a) => lerp(-L / 2 - jag(a, -1), L / 2 + jag(a, 1), t);
+  const foot = u => Math.pow(clamp((-u - L / 2 + LOG.foot) / LOG.foot, 0, 1.2), 2);                                       // 0 along the trunk, 1 at the root end
+  const rOut = (t, a) => { const u = uAt(t, a); return LOG.ro * (1 + foot(u) * (0.14 + 0.3 * lobe(a)) - 0.05 * clamp((u + L / 2) / L, 0, 1)) + 0.22 * Math.sin(a * 9 + u * 0.13) * wave(a, u * 0.05) + 0.12 * Math.sin(a * 23 + u * 0.4); };
+  const shell = (rad, flip) => { const pos = [], idx = [];
+    for (let i = 0; i <= NL; i++) for (let j = 0; j <= NA; j++) { const a = j / NA * TAU, t = i / NL, r = rad(t, a); pos.push(Math.cos(a) * r, uAt(t, a), Math.sin(a) * r); }
+    for (let i = 0; i < NL; i++) for (let j = 0; j < NA; j++) { const p = i * (NA + 1) + j, q = p + NA + 1; if (flip) idx.push(p, p + 1, q, p + 1, q + 1, q); else idx.push(p, q, p + 1, p + 1, q, q + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; };
+  const BARK = `vec3 n=NORMAL; float a=atan(vL.z,vL.x); vec2 bp=vec2(a*5.0, vL.y*0.22);
+    float rid=fbm(vec2(bp.x*1.6,bp.y*0.35)); float fine=fbm(bp*vec2(4.0,6.0));
+    float crack=1.0-smoothstep(0.0,0.09,abs(fract(bp.x*0.55+fbm(bp*0.4)*1.4)-0.5));
+    vec3 alb=mix(vec3(0.115,0.088,0.062),vec3(0.43,0.35,0.26),smoothstep(0.3,0.75,rid))*(0.7+0.6*fine); alb*=1.0-0.6*crack;
+    float moss=smoothstep(0.46,0.7,fbm(bp*vec2(0.55,1.3)+3.0))*smoothstep(0.15,0.85,n.y); alb=mix(alb,vec3(0.17,0.25,0.08)*(0.7+0.5*fine),moss*0.7);
+    float lich=smoothstep(0.8,0.88,vnoise(bp*0.9+7.0)); alb=mix(alb,vec3(0.55,0.60,0.45),lich*0.2*(1.0-moss));
+    n=normalize(n+(vec3(fine,rid,fbm(bp*3.0+9.0))-0.5)*0.55-n*crack*0.3);`;
+  const barkM = mat(`void main(){ ${BARK} gl_FragColor=vec4(finish(shade(alb,n,vW,0.03+0.08*moss,0.0),vW),1.0); }`);
+  const innerM = mat(`void main(){ vec3 n=NORMAL; float a=atan(vL.z,vL.x); float g=fbm(vec2(a*5.0,vL.y*0.5));
     vec3 alb=mix(vec3(0.20,0.11,0.05),vec3(0.55,0.36,0.18),g);
     float glow=smoothstep(0.86,0.95,vnoise(vec2(a*4.0,vL.y*0.6)))*0.9;
     vec3 c=shade(alb,n,vW,0.05,0.0)*0.55+vec3(0.35,0.75,0.45)*glow*0.6;
     gl_FragColor=vec4(finish(c,vW),1.0); }`, { side: THREE.BackSide });
-    const o = new THREE.Mesh(new THREE.CylinderGeometry(LOG.ro, LOG.ro * 1.05, LOG.len, 30, 6, true), outerM);
-    const i = new THREE.Mesh(new THREE.CylinderGeometry(LOG.ri, LOG.ri, LOG.len, 30, 6, true), innerM);
-    const rimM = simple('0.55,0.40,0.24', 0.05, 0.0, { side: THREE.DoubleSide });
-    for (const s of [-1, 1]) { const r = new THREE.Mesh(new THREE.RingGeometry(LOG.ri, LOG.ro, 30), rimM); r.rotation.x = Math.PI / 2; r.position.y = s * LOG.len / 2; logMesh.add(r); }
-    logMesh.add(o, i);
-    logMesh.position.copy(LOG.c); logMesh.quaternion.setFromUnitVectors(YA, LOG.axis); scene.add(logMesh);
-  }
+  // broken wood: pale, with year rings and splinters. vC.x is 1 on a face that shows the rings (a stub end), 0 on the splintered wall
+  const woodM = mat(`void main(){ vec3 n=NORMAL; float r=length(vL.xz); float a=atan(vL.z,vL.x);
+    float ring=0.5+0.5*sin(r*9.0+fbm(vec2(a*2.0,r))*5.0); float fib=fbm(vec2(a*26.0,vL.y*0.5));
+    vec3 alb=mix(vec3(0.42,0.29,0.16),vec3(0.70,0.55,0.34),mix(fib,ring*0.6+fib*0.4,0.5)); alb*=0.72+0.28*smoothstep(${LOG.ri.toFixed(2)},${LOG.ro.toFixed(2)},r);
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.04,0.0),vW),1.0); }`, { side: THREE.DoubleSide });
+  const footM = mat(`void main(){ vec3 n=NORMAL; float r=length(vL.xz); float a=atan(vL.z,vL.x); float f=fbm(vec2(a*9.0,r*1.3)); float f2=fbm(vec2(a*2.0+3.0,r*0.4));
+    vec3 alb=mix(vec3(0.16,0.11,0.07),vec3(0.42,0.30,0.18),f)*(0.7+0.6*f2); n=normalize(n+(vec3(f,f2,fbm(vec2(a*5.0,r)+4.0))-0.5)*0.9);
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.02,0.0),vW),1.0); }`, { side: THREE.DoubleSide });
+  logMesh.add(new THREE.Mesh(shell(rOut, false), barkM), new THREE.Mesh(shell(() => LOG.ri, false), innerM));
+  for (const s of [-1, 1]) { const pos = [], idx = [], t = s < 0 ? 0 : 1;             // the wall at each end, between bark and hollow: torn and earthy at the roots, pale splinters at the break
+    for (let j = 0; j <= NA; j++) { const a = j / NA * TAU, u = uAt(t, a), ro = rOut(t, a); pos.push(Math.cos(a) * ro, u, Math.sin(a) * ro, Math.cos(a) * LOG.ri, u + s * 0.5, Math.sin(a) * LOG.ri); }
+    for (let j = 0; j < NA; j++) { const p = j * 2; idx.push(p, p + 1, p + 2, p + 1, p + 3, p + 2); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); logMesh.add(new THREE.Mesh(g, s === ROOT ? footM : woodM)); }
+  // a limb: bent, thinner to its tip. pts are in the log's own frame (y along the trunk)
+  const limb = (pts, r0, r1, m) => { for (let i = 0; i + 1 < pts.length; i++) { const A = pts[i], B = pts[i + 1], d = B.clone().sub(A), len = d.length(), ka = i / (pts.length - 1), kb = (i + 1) / (pts.length - 1);
+    const g = new THREE.CylinderGeometry(lerp(r0, r1, kb), lerp(r0, r1, ka), len * 1.08, 9, 1, i + 2 < pts.length); const c = new THREE.Mesh(g, m);
+    c.position.copy(A).add(B).multiplyScalar(0.5); c.quaternion.setFromUnitVectors(YA, d.normalize()); logMesh.add(c); } };
+  // broken branch stubs on the upper side, each with a pale broken face
+  for (const [u, da, len, r] of [[-6, 0.5, 3.4, 0.95], [5, -0.75, 2.4, 0.8], [13, 0.25, 4.4, 1.05], [19, -0.35, 1.8, 0.7]]) { const a = upA + da, c = Math.cos(a), s = Math.sin(a);
+    const A = new V3(c * (LOG.ro - 0.6), u, s * (LOG.ro - 0.6)), d = new V3(c, 0.8, s).normalize(), B = A.clone().addScaledVector(d, len + 0.6);
+    limb([A, A.clone().lerp(B, 0.5), B], r, r * 0.72, barkM);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.72, r * 0.5, 9, 1, true), woodM); cap.position.copy(B).addScaledVector(d, r * 0.2); cap.quaternion.setFromUnitVectors(YA, d); logMesh.add(cap); }
+  logMesh.position.copy(LOG.c); logMesh.quaternion.setFromUnitVectors(YA, LOG.axis); scene.add(logMesh);
+  Math.random = gameRandom;
 }
 
 // ================= ROUND 6: the forest edge, life on the pond, scent stones =================
@@ -250,16 +289,75 @@ export function setupHollow() {
     const a0 = HOLLOW.a0; // the root comes in from the side facing home, a little round
     const pts = [26, 21, 17.5, 15, 11].map((r, i) => { const a = a0 + (i - 2) * 0.05, x = HOLLOW.x + Math.cos(a) * r, z = HOLLOW.z + Math.sin(a) * r; return new V3(x, Math.max(gy, terrainH(x, z)) + 2.3 + (i === 0 ? 0.4 : 0), z); });
     const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal'); return { gy, sc, Rs, curve, S: curve.getSpacedPoints(40), tr: 2.1, hole: curve.getPointAt(0.42) }; })();
-  { const brM = mat(`uniform vec3 uHole; void main(){ if(distance(vW,uHole)<2.45) discard; vec3 n=NORMAL; float a=fbm(vW.xz*0.9+vW.y*0.7), b=vnoise(vW.xz*5.0+vW.y*4.0); float cane=1.0-abs(2.0*vnoise(vec2(vW.x*1.7+vW.z*1.3, vW.y*0.8+vW.x*0.5-vW.z*0.6)*2.2)-1.0); cane=pow(cane,3.0)*0.6+0.25*vnoise(vW.xz*3.0+vW.y*2.0);
-      vec3 alb=mix(vec3(0.03,0.05,0.02),mix(vec3(0.16,0.24,0.05),vec3(0.30,0.20,0.10),b),cane)*(0.55+0.7*a); alb=mix(alb,vec3(0.30,0.12,0.12),smoothstep(0.7,0.9,b)*0.5); // thorny canes, a few red berries
-      alb=mix(alb,vec3(0.45,0.05,0.12),smoothstep(0.93,0.97,vnoise(vW.xz*9.0+vW.y*7.0)));
-      gl_FragColor=vec4(finish(shade(alb,n,vW,0.08,0.7),vW),1.0); }`, { uniforms: { uHole: { value: HOL.hole } }, side: THREE.DoubleSide });
+  { // A wild bramble thicket: a dark tangle inside, leaves all over it, arching thorny canes, blackberries.
+    // The old build made 10 objects here. Take their 40 numbers from the game's random stream, then use an own stream,
+    // so that everything built or drawn by chance after this place stays as it was.
+    const gameRandom = Math.random; for (let n = 0; n < 40; n++) gameRandom();
+    let rs = 20261126; const rr = (a = 1, b) => { rs = (rs * 1664525 + 1013904223) >>> 0; const u = rs / 4294967296; return b === undefined ? u * a : a + u * (b - a); }; Math.random = () => rr();
+    const R = HOLLOW.r, cx = HOLLOW.x, cz = HOLLOW.z, gy = HOL.gy, a0 = HOLLOW.a0;
+    const domeY = d => -8 + Math.sqrt(Math.max(0, HOL.Rs * HOL.Rs - d * d)); // height of the roof above the ground at distance d from the middle
+    const at = (a, d, y) => new V3(cx + Math.cos(a) * d, gy + y, cz + Math.sin(a) * d);
+    const offRoot = a => Math.abs(Math.atan2(Math.sin(a - a0), Math.cos(a - a0)));
+    const inside = (x, y, z) => { const d = Math.hypot(x - cx, z - cz); return (d < R + 0.5 && y < gy + domeY(d) - 0.2) || (hollowRootD(x, z) < HOL.tr + 1.2 && y < gy + 5.6 && d < 29); };
+    // the core: a dark tangle of old canes. It keeps the light out; the leaves hide most of it from outside.
+    const brM = mat(`uniform vec3 uHole; void main(){ if(distance(vW,uHole)<2.45) discard; vec3 n=NORMAL; float a=fbm(vW.xz*0.9+vW.y*0.7), b=vnoise(vW.xz*5.0+vW.y*4.0); float cane=1.0-abs(2.0*vnoise(vec2(vW.x*1.7+vW.z*1.3, vW.y*0.8+vW.x*0.5-vW.z*0.6)*2.2)-1.0); cane=pow(cane,3.0)*0.6+0.2*vnoise(vW.xz*3.0+vW.y*2.0);
+      vec3 alb=mix(vec3(0.012,0.024,0.010),mix(vec3(0.07,0.12,0.03),vec3(0.15,0.09,0.06),b),cane)*(0.55+0.7*a);
+      gl_FragColor=vec4(finish(shade(alb,n,vW,0.04,0.4),vW),1.0); }`, { uniforms: { uHole: { value: HOL.hole } }, side: THREE.DoubleSide });
     const bulge = (g, amt) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 1 + amt * (Math.sin(x * 1.3 + y * 0.7) * Math.cos(z * 1.1 - y) * 0.6 + Math.sin(x * 3.1 + z * 2.3) * 0.4); p.setXYZ(i, x * k, y, z * k); } g.computeVertexNormals(); return g; };
-    for (const r of [HOLLOW.r - 1.2, HOLLOW.r + 1.2]) { const g = bulge(new THREE.CylinderGeometry(r, r, HOLLOW.wallH + 3, 64, 6, true), 0.06); g.translate(HOLLOW.x, HOL.gy + (HOLLOW.wallH + 3) / 2 - 3, HOLLOW.z); scene.add(new THREE.Mesh(g, brM)); }
-    const dome = new THREE.SphereGeometry(HOL.Rs, 48, 16, 0, TAU, 0, Math.asin(HOLLOW.r / HOL.Rs) + 0.04); bulge(dome, 0.05); dome.translate(HOL.sc.x, HOL.sc.y, HOL.sc.z); scene.add(new THREE.Mesh(dome, brM));
+    for (const r of [R - 1.2, R + 1.2]) { const g = bulge(new THREE.CylinderGeometry(r, r, HOLLOW.wallH + 3, 64, 6, true), 0.06); g.translate(cx, gy + (HOLLOW.wallH + 3) / 2 - 3, cz); scene.add(new THREE.Mesh(g, brM)); }
+    const dome = new THREE.SphereGeometry(HOL.Rs, 48, 16, 0, TAU, 0, Math.asin(R / HOL.Rs) + 0.04); bulge(dome, 0.05); dome.translate(HOL.sc.x, HOL.sc.y, HOL.sc.z); scene.add(new THREE.Mesh(dome, brM));
+    // the leaves: many small clumps of different height, so that the outline is ragged and not a smooth dome
+    const blobs = [], blob = (a, d, y, rx, ry) => blobs.push([cx + Math.cos(a) * d, gy + y, cz + Math.sin(a) * d, rx, ry, rx]);
+    for (let n = 0; n < 20; n++) blob(n / 20 * TAU + rr(-0.1, 0.1), R + rr(0.2, 1.6), rr(1.6, 3.4), rr(3.2, 4.3), rr(2.8, 3.8));
+    for (let n = 0; n < 18; n++) blob(n / 18 * TAU + rr(-0.12, 0.12), R + rr(-0.6, 0.8), rr(6.2, 8.2), rr(3.2, 4.4), rr(2.8, 3.8));
+    for (let n = 0; n < 14; n++) { const d = rr(11, 13.5); blob(n / 14 * TAU + rr(-0.15, 0.15), d, domeY(d) + rr(-0.6, 0.9), rr(3.6, 4.8), rr(2.2, 3.2)); }
+    for (let n = 0; n < 9; n++) { const d = rr(6, 8.5); blob(n / 9 * TAU + rr(-0.25, 0.25), d, domeY(d) + rr(-0.6, 0.8), rr(3.6, 4.8), rr(2.2, 3.1)); }
+    for (let n = 0; n < 4; n++) { const d = rr(0.5, 3.5); blob(n / 4 * TAU + rr(1.2), d, domeY(d) + rr(-0.5, 0.6), rr(3.6, 4.6), rr(2.2, 3)); }
+    for (let n = 0; n < 5; n++) { const d = rr(3, 14); blob(0.7 + n * 1.31 + rr(-0.3, 0.3), d, domeY(d) + rr(1.2, 2.4), rr(3.2, 4.2), rr(3.4, 4.4)); } // taller tufts
+    for (let n = 0; n < 5; n++) blob(a0 + 0.95 + n * 1.06 + rr(-0.2, 0.2), R + rr(5, 7.5), rr(0.4, 1.3), rr(2.6, 3.6), rr(1.9, 2.7)); // young growth round the foot
+    const leaves = leafShell(blobs, { size: 2.6, ta: '0.03,0.10,0.03', tb: '0.21,0.37,0.07', blos: 0.05 });
+    { const m4 = new M4(), zero = new M4().makeScale(0, 0, 0), e = m4.elements; // no leaves in the grove or in the root tunnel
+      for (let n = 0; n < leaves.count; n++) { leaves.getMatrixAt(n, m4); if (inside(e[12], e[13], e[14])) leaves.setMatrixAt(n, zero); } leaves.instanceMatrix.needsUpdate = true; }
+    // the canes: hoops that root again at the tip, long canes over the top, and young whips that arch into the air
+    const pos = [], nor = [], col = [], idx = [], thorns = [], _p = new V3(), _t = new V3(), _n = new V3(), _b = new V3(), SEG = 6;
+    const cane = (pts, r0, r1, young) => { const c = new THREE.CatmullRomCurve3(pts, false, 'centripetal'), n = Math.max(8, Math.round(c.getLength() / 1.1)), base = pos.length / 3, tone = rr(0.75, 1.2);
+      for (let i = 0; i <= n; i++) { const u = i / n; c.getPointAt(u, _p); c.getTangentAt(u, _t); _n.crossVectors(_t, YA); if (_n.lengthSq() < 1e-4) _n.set(1, 0, 0); _n.normalize(); _b.crossVectors(_t, _n);
+        const r = lerp(r0, r1, u);
+        for (let j = 0; j < SEG; j++) { const a = j / SEG * TAU, ca = Math.cos(a), sa = Math.sin(a), nx = _n.x * ca + _b.x * sa, ny = _n.y * ca + _b.y * sa, nz = _n.z * ca + _b.z * sa; pos.push(_p.x + nx * r, _p.y + ny * r, _p.z + nz * r); nor.push(nx, ny, nz); col.push(young ? 1 - u * 0.3 : 0, tone, 1); }
+        if (i > 0 && i < n && r > 0.09 && rr() < 0.8 && !inside(_p.x, _p.y, _p.z)) { const a = rr(TAU), ca = Math.cos(a), sa = Math.sin(a); thorns.push([_p.x, _p.y, _p.z, _n.x * ca + _b.x * sa - _t.x * 0.35, _n.y * ca + _b.y * sa - _t.y * 0.35, _n.z * ca + _b.z * sa - _t.z * 0.35, r]); } }
+      for (let i = 0; i < n; i++) for (let j = 0; j < SEG; j++) { const p = base + i * SEG + j, q = base + i * SEG + (j + 1) % SEG; idx.push(p, q, p + SEG, q, q + SEG, p + SEG); } };
+    for (let n = 0; n < 24; n++) { let a = n / 24 * TAU + rr(-0.1, 0.1); const sw = (rr() < 0.5 ? -1 : 1) * rr(0.5, 1.3); if (offRoot(a) < 0.3 || offRoot(a + sw) < 0.3) a += 0.6;
+      const df = R + rr(2.6, 5.4), dl = R + rr(2.6, 6), dm = R - rr(0, 4.5), hm = domeY(dm) + rr(3.4, 6.2);
+      cane([at(a, df, -0.6), at(a + sw * 0.1, df - 0.9, 6 + rr(2)), at(a + sw * 0.5, dm, hm), at(a + sw * 0.9, dl - 0.9, 6 + rr(2)), at(a + sw, dl, -0.6)], rr(0.2, 0.28), rr(0.14, 0.18), false); }
+    for (let n = 0; n < 7; n++) { let a = n / 7 * TAU + rr(-0.3, 0.3); const b = a + Math.PI + rr(-0.7, 0.7); if (offRoot(a) < 0.3) a += 0.5; const bb = offRoot(b) < 0.3 ? b + 0.5 : b, dt = rr(1, 5), am = a + rr(0.5, 1.4);
+      cane([at(a, R + 3.4, -0.6), at(a, R + 1.9, 7), at(a + 0.08, 11.5, domeY(11.5) + rr(2.8, 3.8)), at(am, dt, domeY(dt) + rr(3, 4.6)), at(bb - 0.08, 11.5, domeY(11.5) + rr(2.8, 3.8)), at(bb, R + 1.9, 7), at(bb, R + 3.6, -0.6)], rr(0.24, 0.3), 0.17, false); }
+    for (let n = 0; n < 10; n++) { const a = 0.4 + n / 10 * TAU + rr(-0.25, 0.25), d0 = rr(5, 14.5), y0 = domeY(d0), up = rr(5.5, 9), tw = (rr() < 0.5 ? -1 : 1) * rr(0.1, 0.3), far = rr(0.75, 1.15);
+      cane([at(a, d0, y0 + 0.5), at(a + tw * 0.3, d0 + 1.6 * far, y0 + up * 0.7), at(a + tw * 0.7, d0 + 5.5 * far, y0 + up), at(a + tw, d0 + 9.8 * far, y0 + up - 2.6), at(a + tw * 1.2, d0 + 12.6 * far, y0 + up - 6.2)], rr(0.22, 0.28), 0.05, true); }
+    { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+      const caneM = mat(`void main(){ vec3 n=normalize(vN); float f=fbm(vW.xz*1.6+vW.y*1.3), s=vnoise(vW.xz*7.0+vW.y*9.0);
+        vec3 old=mix(vec3(0.115,0.04,0.05),vec3(0.26,0.115,0.085),f), young=mix(vec3(0.20,0.30,0.07),vec3(0.42,0.46,0.13),f); young=mix(young,vec3(0.50,0.16,0.14),smoothstep(0.45,0.75,f)*0.5);
+        vec3 alb=mix(old,young,vC.x)*vC.y*(0.8+0.4*s); gl_FragColor=vec4(finish(shade(alb,n,vW,0.22,0.15),vW),1.0); }`, { vertexColors: true, side: THREE.DoubleSide });
+      const m = new THREE.Mesh(g, caneM); m.frustumCulled = false; scene.add(m);
+      const tg = new THREE.ConeGeometry(0.12, 0.62, 5); tg.translate(0, 0.31, 0); const tm = new THREE.InstancedMesh(tg, simple('0.62,0.30,0.20', 0.15, 0.3), thorns.length), m4 = new M4(), q = new Q4(), sc = new V3();
+      thorns.forEach((t, n) => { _t.set(t[3], t[4], t[5]).normalize(); q.setFromUnitVectors(YA, _t); const k = rr(0.7, 1.15) * clamp(t[6] / 0.24, 0.45, 1.2); sc.set(k, k, k); _p.set(t[0], t[1], t[2]).addScaledVector(_t, t[6] * 0.7); tm.setMatrixAt(n, m4.compose(_p, q, sc)); });
+      tm.frustumCulled = false; tm.userData.noShadow = true; scene.add(tm); }
+    // blackberries: black ripe ones and red ones not yet ripe, in small bunches at the outside of the leaves
+    { const B = [], out = blobs.filter(b => b[1] - gy < 9.5 || rr() < 0.5), _d = new V3();
+      for (let n = 0; n < 600 && B.length < 210; n++) { const b = out[Math.floor(rr(out.length))], u = rr(-0.5, 0.85), a = rr(TAU), sq = Math.sqrt(1 - u * u); _d.set(sq * Math.cos(a), u, sq * Math.sin(a));
+        const x = b[0] + _d.x * b[3] * 1.06, y = b[1] + _d.y * b[4] * 1.06, z = b[2] + _d.z * b[5] * 1.06; if (y < gy + 0.8 || inside(x, y, z) || _d.x * (x - cx) + _d.z * (z - cz) < 0 && y < gy + 9) continue;
+        let buried = false; for (const c of blobs) { if (c === b) continue; const ex = (x - c[0]) / c[3], ey = (y - c[1]) / c[4], ez = (z - c[2]) / c[5]; if (ex * ex + ey * ey + ez * ez < 1.0) { buried = true; break; } } if (buried) continue;
+        const bunch = 2 + Math.floor(rr(3)), ripe0 = rr(); for (let m = 0; m < bunch; m++) B.push([x + rr(-0.7, 0.7), y + rr(-0.6, 0.6), z + rr(-0.7, 0.7), rr(0.42, 0.62), ripe0 + rr(-0.35, 0.35)]); }
+      const berryM = mat(`void main(){ vec3 n=NORMAL; vec3 d=normalize(vL); vec2 q=vec2(atan(d.z,d.x)*2.4, d.y*3.4); q.x+=0.5*floor(q.y); vec2 c=fract(q)-0.5; float bump=1.0-smoothstep(0.0,0.5,length(c));
+        n=normalize(n+vec3(-d.z*c.x, c.y*0.8, d.x*c.x)*-1.3); vec3 alb=vC*(0.45+0.9*bump);
+        gl_FragColor=vec4(finish(shade(alb,n,vW,0.55,0.1),vW),1.0); }`);
+      const bm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), berryM, B.length), m4 = new M4(), q = new Q4(), sc = new V3(), cc = new THREE.Color(), e = new THREE.Euler();
+      B.forEach((b, n) => { q.setFromEuler(e.set(rr(-0.5, 0.5), rr(TAU), rr(-0.5, 0.5))); sc.set(b[3], b[3] * 1.18, b[3]); bm.setMatrixAt(n, m4.compose(_p.set(b[0], b[1], b[2]), q, sc));
+        if (b[4] > 0.42) cc.setRGB(0.035, 0.018, 0.06); else if (b[4] > 0.12) cc.setRGB(0.50, 0.035, 0.07); else cc.setRGB(0.55, 0.50, 0.22); bm.setColorAt(n, cc); });
+      bm.frustumCulled = false; bm.userData.noShadow = true; scene.add(bm); HOL.berries = B.length; HOL.canes = 41; HOL.leaves = leaves.count; }
     const rootM = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vec2(atan(vL.z,vL.x)*4.0,vL.y*0.4)); vec3 alb=mix(vec3(0.09,0.06,0.035),vec3(0.36,0.26,0.16),smoothstep(0.3,0.7,a));
       alb=mix(alb,vec3(0.14,0.30,0.05),smoothstep(0.5,0.7,fbm(vL.xy*0.3+2.0))*smoothstep(0.0,0.7,n.y)*0.7); gl_FragColor=vec4(finish(shade(alb,n,vW,0.06,0.2),vW),1.0); }`, { side: THREE.DoubleSide });
     scene.add(new THREE.Mesh(new THREE.TubeGeometry(HOL.curve, 60, HOL.tr + 0.35, 14), rootM));
+    Math.random = gameRandom;
   }
 }
 

@@ -65,6 +65,20 @@ module.exports = [
       return r;
     } },
 
+  { id: 'GFX-007-fallen-tree', req: 'GFX-007', name: 'The old log is a fallen tree: wider at its root end, with a splintered break at the other end and branch stubs. The bee stays outside the wider root end, and the way through is open',
+    async run(t) {
+      const r = await t.ev(() => { const g = __g, L = g.LOG, A = L.axis, c = L.c, P = g.P, o = {}; T.fly(0, 40, 120); T.quiet();
+        let wood = null; g.scene.traverse(x => { if (!wood && x.isGroup && x.position.distanceTo(c) < 0.01) wood = x; }); const box = new g.THREE.Box3().setFromObject(wood), parts = wood.children.length;
+        const mats = new Set(wood.children.map(m => m.material)).size; o.parts = parts; o.mats = mats; o.long = +(Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z)).toFixed(0);
+        const ram = u => { T.place(c.x + A.x * u - A.z * 25, c.y, c.z + A.z * u + A.x * 25); P.yaw = Math.atan2(-A.z, A.x) + Math.PI; let min = 99; T.key('KeyW'); for (let i = 0; i < 180; i++) { T.sim(1 / 60); P.yaw = Math.atan2(-(c.x + A.x * u - P.pos.x), -(c.z + A.z * u - P.pos.z)); P.pitch = 0;
+          const dx = P.pos.x - c.x, dy = P.pos.y - c.y, dz = P.pos.z - c.z, w = dx * A.x + dz * A.z; min = Math.min(min, Math.hypot(dx - A.x * w, dy, dz - A.z * w)); } T.key('KeyW', false); return +min.toFixed(2); };
+        o.mid = ram(0); o.root = ram(-L.len / 2 + 1); o.ro = L.ro;
+        T.place(c.x - A.x * (L.len / 2 + 12), c.y, c.z - A.z * (L.len / 2 + 12), Math.atan2(-A.x, -A.z), 0); T.key('KeyW'); let inside = false; for (let i = 0; i < 300; i++) { T.sim(1 / 60); P.yaw = Math.atan2(-A.x, -A.z); P.pitch = 0; const w = (P.pos.x - c.x) * A.x + (P.pos.z - c.z) * A.z; const rr = Math.hypot(P.pos.x - c.x - A.x * w, P.pos.y - c.y, P.pos.z - c.z - A.z * w); if (Math.abs(w) < 2 && rr < L.ri) inside = true; if (w > L.len / 2 + 2) break; }
+        T.key('KeyW', false); o.through = inside && ((P.pos.x - c.x) * A.x + (P.pos.z - c.z) * A.z) > L.len / 2 + 2; return o; });
+      t.check(r.parts >= 8 && r.mats >= 4, `the tree has bark, hollow, torn wood and stubs (${r.parts} parts, ${r.mats} materials)`); t.check(r.long > 47, 'the splinters and the roots reach past the tube: ' + r.long + ' long');
+      t.check(r.mid >= r.ro && r.mid < r.ro + 1.2, `at the middle the bee stops at the bark (${r.mid})`); t.check(r.root > r.mid + 0.8, `at the root end the trunk is wider (${r.root} against ${r.mid})`); t.eq(r.through, true, 'the bee flies in at the roots and out at the break'); return r;
+    } },
+
   { id: 'COL-007-stone', req: 'COL-007', name: 'A scent stone is solid at its side',
     async run(t) {
       await t.ev(RAM);

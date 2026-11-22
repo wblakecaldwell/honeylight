@@ -51,8 +51,10 @@ export function setupShaders() {
   U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 };
   // night hooks (night.js): uNight 0..1 turns the sun into the moon and brings out the stars; uLamp is one soft light that travels with the bee (xyz, strength)
   U.uNight = { value: 0 }; U.uLamp = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uLampC = { value: new V3(1.0, 0.78, 0.36) };
+  // storm hooks (storm.js): uStorm = (direction x, direction z, where the cloud edge is in the sky, strength 0..1); uStorm2 = (the cloud's far edge, rain mist, gloom under the cloud)
+  U.uStorm = { value: new THREE.Vector4(1, 0, 0, 0) }; U.uStorm2 = { value: new V3(0, 0, 0) };
   COMMON = `
-uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC;
+uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC; uniform vec4 uStorm; uniform vec3 uStorm2;
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;
 float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -77,6 +79,7 @@ vec3 hazeCol(vec3 dir){
   vec3 c=mix(vec3(0.46,0.52,0.70), vec3(1.30,0.84,0.46), 0.12+0.88*pow(sd,2.0));
   vec3 hc=c+vec3(1.4,0.75,0.3)*pow(sd,20.0)*0.9;
   if(uNight>0.001) hc=mix(hc, vec3(0.50,0.56,0.70)+vec3(0.55,0.60,0.75)*pow(sd,6.0), uNight);
+  if(uStorm2.z>0.001) hc=mix(hc, vec3(0.36,0.39,0.46), uStorm2.z*0.9);
   return hc*uHaze;
 }
 bool inHole(vec3 p){ return p.x>0.0 && length(vec2(p.y-${TY.toFixed(1)},p.z))<${TR.toFixed(2)}; }
@@ -108,6 +111,7 @@ vec3 finish(vec3 c, vec3 p){
   vec3 dir=(p-uCam)/max(dist,1e-4);
   float hgt=exp(-max(p.y-(${GY}.0),0.0)*0.035);
   float f=(1.0-exp(-dist*(0.0012+0.0024*hgt)))*(1.0-ih);
+  if(uStorm2.y>0.001) f=(1.0-exp(-dist*(0.0012+0.0024*hgt+0.007*uStorm2.y)))*(1.0-ih);
   return mix(c,hazeCol(dir),f);
 }
 #define NORMAL (gl_FrontFacing? normalize(vN) : -normalize(vN))
