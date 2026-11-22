@@ -102,6 +102,13 @@ shadowRT.depthTexture = new THREE.DepthTexture(SHADOW_RES, SHADOW_RES); shadowRT
 shadowRT.depthTexture.compareFunction = THREE.LessEqualCompare; shadowRT.depthTexture.minFilter = shadowRT.depthTexture.magFilter = THREE.LinearFilter;
 const U = { uTime: { value: 0 }, uCam: { value: new V3() }, uSun: { value: SUN }, uGlow: { value: 0 }, uShadow: { value: shadowRT.depthTexture }, uShadowM: { value: new M4() }, uShadowOn: { value: 0 } };
 U.uWind = { value: new V3() }; U.uHome = { value: new V3(1, 0, 0) }; U.uHomeK = { value: 0 };
+const MP = !/mp=0/.test(location.search); // model pass (trees, grass, hive door). ?mp=0 shows the old look
+const cloverGLSL = () => `
+    float cm=smoothstep(0.5,0.62,fbm(vW.xz*0.045+4.0))*step(${(WY + 1).toFixed(1)},vW.y);
+    vec2 cg=vW.xz/0.9, ci=floor(cg); float ch=hash21(ci); vec2 q=fract(cg)-0.5-(vec2(hash21(ci+3.1),hash21(ci+7.7))-0.5)*0.3; float ra=ch*6.2832; q=mat2(cos(ra),-sin(ra),sin(ra),cos(ra))*q;
+    float lf=0.0, chev=0.0; for(int k=0;k<3;k++){ float a=float(k)*2.0944; vec2 lq=q-vec2(cos(a),sin(a))*0.15; float r=length(lq); lf=max(lf,1.0-smoothstep(0.12,0.14,r)); chev=max(chev,(1.0-smoothstep(0.0,0.014,abs(r-0.07)))*(1.0-smoothstep(0.12,0.14,r))); }
+    alb=mix(alb,vec3(0.05,0.15,0.025)*(0.8+0.35*ch)+chev*vec3(0.05,0.06,0.03),lf*cm*step(ch,0.75));
+    float ms=smoothstep(0.55,0.7,fbm(vW.xz*0.06+11.0)); alb=mix(alb,vec3(0.13,0.27,0.04)*(0.55+0.8*vnoise(vW.xz*14.0)),ms*0.55*(1.0-cm));`;
 U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 };
 const SWAYGLSL = `uniform float uTime; uniform vec3 uWind; attribute float aSway;
 vec2 sway(vec2 p){ float ph=p.x*0.07+p.y*0.05; float s=sin(uTime*1.3+ph)*0.6+sin(uTime*2.9+ph*1.7)*0.25; return uWind.xy*(uWind.z*0.55+s*(0.35+uWind.z*0.4)); }
@@ -633,27 +640,103 @@ function updateParts(dt) { for (let i = 0; i < PN; i++) { const q = parts[i], k 
     vec3 alb=mix(vec3(0.06,0.17,0.03),vec3(0.26,0.40,0.07),a)*(0.7+0.6*b);
     alb=mix(alb,vec3(0.30,0.22,0.11),smoothstep(0.55,0.75,fbm(vW.xz*0.09+9.0))*0.5);
     alb=mix(alb,vec3(0.24,0.20,0.12)*(0.6+0.6*b),smoothstep(${(WY + 2.6).toFixed(1)},${(WY + 0.2).toFixed(1)},vW.y));
-    alb*=mix(1.0,0.35,smoothstep(${WY.toFixed(1)},${(WY - 5).toFixed(1)},vW.y));
+    alb*=mix(1.0,0.35,smoothstep(${WY.toFixed(1)},${(WY - 5).toFixed(1)},vW.y));${MP ? cloverGLSL() : ''}
     gl_FragColor=vec4(finish(shade(alb,n,vW,0.0,0.0),vW),1.0); }`)));
 }
 const barkMat = mat(`void main(){ if(inHole(vW) && length(vW.xz)<14.0) discard; vec3 n=NORMAL; float a=atan(vL.z,vL.x); float R=max(length(vL.xz),0.5);
   vec2 bp=vec2(a*R*0.9, vW.y*0.22);
   float rid=fbm(vec2(bp.x*1.6,bp.y*0.35)); float fine=fbm(bp*vec2(4.0,6.0));
   float crack=1.0-smoothstep(0.0,0.09,abs(fract(bp.x*0.55+fbm(bp*0.4)*1.4)-0.5));
-  vec3 alb=mix(vec3(0.10,0.075,0.05),vec3(0.42,0.33,0.24),smoothstep(0.3,0.7,rid))*(0.7+0.6*fine); alb*=1.0-0.7*crack;
-  float moss=smoothstep(0.5,0.7,fbm(bp*0.25+3.0))*smoothstep(25.0,-12.0,vW.y); alb=mix(alb,vec3(0.16,0.30,0.06)*(0.7+0.5*fine),moss*0.8);
-  float lich=smoothstep(0.74,0.8,vnoise(bp*2.3+7.0)); alb=mix(alb,vec3(0.55,0.60,0.45),lich*0.55*(1.0-moss));
+  ${MP ? `vec3 alb=mix(vec3(0.075,0.055,0.04),vec3(0.36,0.29,0.22),smoothstep(0.3,0.75,rid))*(0.7+0.6*fine);
+  float bcol=floor(bp.x*0.55+fbm(bp*0.4)*1.4); float hcr=1.0-smoothstep(0.0,0.05,abs(fract(vW.y*0.09+hash21(vec2(bcol,3.0)))-0.5)-0.44);
+  alb*=1.0-0.75*crack; alb*=1.0-0.45*hcr*(1.0-crack);` : `vec3 alb=mix(vec3(0.10,0.075,0.05),vec3(0.42,0.33,0.24),smoothstep(0.3,0.7,rid))*(0.7+0.6*fine); alb*=1.0-0.7*crack;`}
+  float moss=smoothstep(0.5,0.7,fbm(${MP ? 'vec2(bp.x,vW.y*0.8)' : 'bp'}*0.25+3.0))*smoothstep(25.0,-12.0,vW.y); alb=mix(alb,vec3(0.16,0.30,0.06)*(0.7+0.5*fine),moss*0.8);
+  float lich=${MP ? 'smoothstep(0.8,0.88,vnoise(vec2(bp.x,vW.y*0.8)*0.9+7.0))' : 'smoothstep(0.74,0.8,vnoise(bp*2.3+7.0))'}; alb=mix(alb,vec3(0.55,0.60,0.45),lich*${MP ? '0.16' : '0.55'}*(1.0-moss));
   vec3 tg=vec3(-sin(a),0.0,cos(a)); n=normalize(n+tg*(fine-0.5)*0.7+vec3(0.0,(rid-0.5)*0.35,0.0)-n*crack*0.3);
-  gl_FragColor=vec4(finish(shade(alb,n,vW,0.03+0.1*moss,0.0),vW),1.0); }`);
+  float hs=${MP ? `step(0.0,vW.x)*step(length(vW.xz),${(ROUT + 6).toFixed(1)})*smoothstep(${(TR + 3.2).toFixed(2)},${(TR + 0.4).toFixed(2)},length(vec2(vW.z,(vW.y-${TY.toFixed(1)})*(vW.y<${TY.toFixed(1)}?0.4:1.1))))` : '0.0'};
+  alb=mix(alb,vec3(0.20,0.10,0.03)*(0.7+0.5*fine),hs*0.85);
+  gl_FragColor=vec4(finish(shade(alb,n,vW,0.03+0.1*moss+0.5*hs,0.0),vW),1.0); }`);
 function trunkGeo(R, base, top) { return new THREE.LatheGeometry([[R + 9, base - 5], [R + 4, base + 3], [R + 1.2, base + 9], [R, base + 13], [R, top * 0.6], [R * 0.85, top]].map(a => new THREE.Vector2(a[0], a[1])), 48); }
 scene.add(new THREE.Mesh(trunkGeo(ROUT, GY, 90), barkMat));
-{ const g = new THREE.TorusGeometry(TR + 0.35, 0.5, 10, 28); g.rotateY(Math.PI / 2); const m = new THREE.Mesh(g, barkMat); m.position.set(ROUT - 0.1, TY, 0); m.scale.set(0.6, 1, 1); scene.add(m); }
+if (!MP) { const g = new THREE.TorusGeometry(TR + 0.35, 0.5, 10, 28); g.rotateY(Math.PI / 2); const m = new THREE.Mesh(g, barkMat); m.position.set(ROUT - 0.1, TY, 0); m.scale.set(0.6, 1, 1); scene.add(m); }
+else { const RC = TR + 0.6, g = new THREE.TorusGeometry(RC, 0.62, 18, 64), p = g.attributes.position, c = new V3(), ctr = new V3();
+  for (let i = 0; i < p.count; i++) { c.set(p.getX(i), p.getY(i), p.getZ(i)); const a = Math.atan2(c.y, c.x); ctr.set(Math.cos(a) * RC, Math.sin(a) * RC, 0);
+    const k = 1 + 0.18 * (0.5 + 0.5 * Math.sin(a * 5 + 1.3) * Math.sin(a * 3.1)) + 0.1 * (0.5 + 0.5 * Math.sin(a * 13 + 2)) + (a < -1.0 && a > -2.2 ? 0.15 : 0);
+    const off = c.clone().sub(ctr); const outward = off.dot(ctr.clone().normalize()) > -0.25 ? k : 1; c.copy(ctr).addScaledVector(off, outward); p.setXYZ(i, c.x, c.y, c.z); }
+  g.computeVertexNormals(); g.rotateY(Math.PI / 2);
+  const pm = mat(`void main(){ vec3 n=NORMAL; vec2 q=vW.zy*1.0+vW.x*0.7; float a=fbm(q*2.5); float f=vnoise(q*16.0);
+    n=normalize(n+(vec3(fbm(q*7.0),fbm(q*7.0+3.0),fbm(q*7.0+6.0))-0.5)*0.7);
+    vec3 alb=mix(vec3(0.05,0.022,0.008),vec3(0.20,0.10,0.03),a)*(0.8+0.3*f); alb=mix(alb,vec3(0.30,0.22,0.10),smoothstep(0.74,0.82,vnoise(q*3.0+3.0))*0.3);
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.22,0.2),vW),1.0); }`);
+  const m = new THREE.Mesh(g, pm); m.position.set(ROUT - 0.05, TY, 0); m.scale.set(0.6, 1, 1); scene.add(m);
+  for (let i = 0; i < 6; i++) { const z = rnd(-1.8, 1.8), y = TY - TR - rnd(0.3, 1.6), d = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), pm); d.position.set(Math.sqrt(ROUT * ROUT - z * z) - 0.02, y - 0.2, z); d.scale.set(0.08, rnd(0.3, 0.7), rnd(0.1, 0.18)); scene.add(d); } }
+// ---------- model pass: crowns built from leaf sprays, with real limbs ----------
+const CARD_VERT = `attribute vec3 aN; attribute float aTint; uniform float uTime; uniform vec3 uWind;
+varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying vec3 vBN; varying float vTint;
+void main(){ mat4 m=modelMatrix*instanceMatrix; vec4 w=m*vec4(position,1.0); float sc=length(m[0].xyz);
+  float ph=dot(w.xz,vec2(0.071,0.053))+aTint*31.0; float s=sin(uTime*1.6+ph)+0.5*sin(uTime*2.7+ph*1.7);
+  w.xyz+=(vec3(uWind.x,0.0,uWind.y)*(0.3+uWind.z)*0.05+aN*0.03*s+vec3(0.0,0.02*s,0.0))*sc*(0.4+uv.y);
+  vW=w.xyz; vL=position; vN=normalize(mat3(m)*normal); vUv=uv; vC=vec3(1.0); vBN=aN; vTint=aTint;
+  gl_Position=projectionMatrix*viewMatrix*w; }`;
+const cardMat = (ta, tb, blos) => mat(`varying vec3 vBN; varying float vTint;
+void main(){ vec2 p=vUv*2.0-1.0; float fat=1.0+0.7*smoothstep(50.0,220.0,length(uCam-vW)); float best=0.0, vein=0.0, hl=0.0, kk=1.0, uu=0.0, isB=0.0; vec2 ax=vec2(1.0,0.0);
+  for(int i=0;i<5;i++){ float fi=float(i); float h=hash21(vec2(fi*7.13+1.0,vTint*91.7));
+    float a=fi*1.2566+h*0.8+vTint*6.2832; vec2 dir=vec2(cos(a),sin(a));
+    float bl=step(h,${blos.toFixed(2)}); float L=mix(0.50+0.18*h,0.32+0.08*h,bl); vec2 c=dir*(0.12+L*0.95);
+    vec2 d=p-c; float u=dot(d,dir)/L; float v=dot(d,vec2(-dir.y,dir.x));
+    float w=mix(0.40*L*(1.0-u*u)*(1.0-0.3*u), 0.9*L*sqrt(max(1.0-u*u,0.0))*(0.75+0.25*cos(atan(v,u*L)*5.0)), bl);
+    float k=abs(v)/max(w*fat,1e-3);
+    if(abs(u)<fat && k<1.0){ float z=(1.0-k*k)*(0.6+h); if(z>best){ best=z; hl=h; kk=k; uu=u; ax=dir; isB=bl;
+      vein=(1.0-smoothstep(0.0,0.045,abs(v)))*(1.0-smoothstep(0.6,1.0,u))*(1.0-bl);
+      vein=max(vein,(1.0-smoothstep(0.0,0.06,abs(fract(u*3.5-abs(v)*5.0)-0.5)-0.38))*0.5*(1.0-bl)*step(0.15,k)); } } }
+  if(best<=0.0) discard;
+  vec3 fn=NORMAL; vec3 n0=normalize(vBN*0.75+fn*0.45); vec3 tg=normalize(cross(n0,vec3(0.13,1.0,0.07)));
+  vec3 n=normalize(n0+tg*(hl-0.5)*0.9+cross(n0,tg)*(uu*0.35));
+  vec3 alb=mix(vec3(${ta}),vec3(${tb}),clamp(hl*0.65+vTint*0.5-0.1,0.0,1.0));
+  alb*=0.62+0.38*smoothstep(-0.8,0.7,vBN.y); alb*=1.0-0.28*kk*kk*kk*kk;
+  alb=mix(alb,alb*1.45+vec3(0.03,0.04,0.0),vein*0.55);
+  vec3 bc=mix(vec3(0.95,0.42,0.62),vec3(1.0,0.86,0.9),hash21(vec2(hl*13.0,vTint)))*(1.0-0.35*kk*kk); bc=mix(bc,vec3(0.95,0.7,0.2),(1.0-smoothstep(0.0,0.25,length(p-ax*0.12)))*0.0);
+  alb=mix(alb,bc,isB);
+  gl_FragColor=vec4(finish(shade(alb,n,vW,0.28*(1.0-isB),0.85),vW),1.0); }`, { vert: CARD_VERT, side: THREE.DoubleSide });
+function leafShell(blobs, o) {
+  const size = o.size, dens = (o.dens || 1.7) * 1.5, M = [], N = [], T = [], m4 = new M4(), q = new Q4(), q2 = new Q4(), Z = new V3(0, 0, 1), d = new V3(), nrm = new V3(), pos = new V3(), sc = new V3(), fn = new V3();
+  for (const b of blobs) { const rx = b[3], ry = b[4], rz = b[5] || b[3]; const area = 4 * Math.PI * (rx * ry + rx * rz + ry * rz) / 3; const n = Math.min(o.max || 900, Math.round(area * dens / (size * size)));
+    for (let i = 0; i < n; i++) { const u = rnd(-1, 1), a = rnd(TAU), s = Math.sqrt(1 - u * u); d.set(s * Math.cos(a), u, s * Math.sin(a));
+      const r = rnd(0.95, 1.12); pos.set(b[0] + d.x * rx * r, b[1] + d.y * ry * r, b[2] + d.z * rz * r);
+      let buried = false; for (const c of blobs) { if (c === b) continue; const ex = (pos.x - c[0]) / c[3], ey = (pos.y - c[1]) / c[4], ez = (pos.z - c[2]) / (c[5] || c[3]); if (ex * ex + ey * ey + ez * ez < 0.7) { buried = true; break; } }
+      if (buried) continue;
+      nrm.set(d.x / rx, d.y / ry, d.z / rz).normalize(); fn.set(rnd(-0.7, 0.7), rnd(-0.4, 0.8), rnd(-0.7, 0.7)).add(nrm).normalize();
+      q.setFromUnitVectors(Z, fn); q2.setFromAxisAngle(fn, rnd(TAU)); q.premultiply(q2);
+      const k = size * rnd(0.75, 1.3); sc.set(k, k, k); m4.compose(pos, q, sc); M.push(m4.clone()); N.push(nrm.x, nrm.y, nrm.z); T.push(rnd()); } }
+  const g = new THREE.PlaneGeometry(1, 1); g.setAttribute('aN', new THREE.InstancedBufferAttribute(new Float32Array(N), 3)); g.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(T), 1));
+  const im = new THREE.InstancedMesh(g, cardMat(o.ta, o.tb, o.blos || 0), M.length); M.forEach((m, i) => im.setMatrixAt(i, m)); im.frustumCulled = false; im.userData.noShadow = true; scene.add(im);
+  MPSTAT.cards += M.length; return im; }
+const MPSTAT = { cards: 0, limbs: 0 };
+// limbs: tapered, slightly kinked boughs from the trunk up into the crown. Solid.
+const LIMBS = [];
+function limb(a, b, r0, r1, solid = true) {
+  const mid = a.clone().lerp(b, 0.5); mid.x += rnd(-1, 1) * a.distanceTo(b) * 0.08; mid.y += a.distanceTo(b) * rnd(0.04, 0.12); mid.z += rnd(-1, 1) * a.distanceTo(b) * 0.08;
+  const rm = (r0 + r1) / 2;
+  for (const [p, q, ra, rb] of [[a, mid, r0, rm], [mid, b, rm, r1]]) { const dir = q.clone().sub(p), L = dir.length(); const g = new THREE.CylinderGeometry(rb, ra, L * 1.04, 10, 3);
+    const m = new THREE.Mesh(g, barkMat); m.position.copy(p).addScaledVector(dir, 0.5); m.quaternion.setFromUnitVectors(YA, dir.normalize()); scene.add(m);
+    if (solid) LIMBS.push({ a: p.clone(), b: q.clone(), r: Math.max(ra, rb) }); MPSTAT.limbs++; } }
+const _lp = new V3(), _ld = new V3();
+function limbCollide(p, v) { for (const L of LIMBS) { if (Math.abs(p.x - L.a.x) > 70 || Math.abs(p.z - L.a.z) > 70) continue;
+  _ld.subVectors(L.b, L.a); const t = clamp(_ld.dot(_lp.subVectors(p, L.a)) / _ld.lengthSq(), 0, 1); _lp.copy(L.a).addScaledVector(_ld, t);
+  const dx = p.x - _lp.x, dy = p.y - _lp.y, dz = p.z - _lp.z, dd = Math.hypot(dx, dy, dz), rr = L.r + PR;
+  if (dd < rr && dd > 1e-4) { const nx = dx / dd, ny = dy / dd, nz = dz / dd; p.set(_lp.x + nx * rr, _lp.y + ny * rr, _lp.z + nz * rr); const vn = v.x * nx + v.y * ny + v.z * nz; if (vn < 0) { v.x -= nx * vn * 1.2; v.y -= ny * vn * 1.2; v.z -= nz * vn * 1.2; } } } }
+function crownLimbs(x, base, z, R, blobs, top) { for (const b of blobs) { if (rnd() < 0.15) continue; const a = Math.atan2(b[2] - z, b[0] - x);
+  const s = new V3(x + Math.cos(a) * R * 0.45, base + rnd(-0.06, 0.06) * (top - base), z + Math.sin(a) * R * 0.45), e = new V3(b[0] - (b[0] - x) * 0.15, b[1] - b[4] * 0.25, b[2] - (b[2] - z) * 0.15);
+  limb(s, e, R * 0.32, Math.max(0.5, R * 0.08)); } }
 const leafMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vL.xy*6.0+vL.z*4.0); n=normalize(n+(vec3(fbm(vL.yz*9.0),fbm(vL.xz*9.0),fbm(vL.xy*9.0))-0.5)*1.2);
-  vec3 alb=mix(vec3(0.03,0.11,0.02),vec3(0.22,0.40,0.06),a); gl_FragColor=vec4(finish(shade(alb,n,vW,0.1,0.7),vW),1.0); }`);
+  vec3 alb=mix(vec3(0.03,0.11,0.02),vec3(0.22,0.40,0.06),a)*${MP ? '0.45' : '1.0'}; gl_FragColor=vec4(finish(shade(alb,n,vW,0.1,0.7),vW),1.0); }`);
 const blobG = new THREE.IcosahedronGeometry(1, 3);
-function canopy(x, y, z, r, n) { for (let i = 0; i < n; i++) { const m = new THREE.Mesh(blobG, leafMat); const a = rnd(TAU), d = rnd(0.2, 1) * r; m.position.set(x + Math.cos(a) * d, y + rnd(-0.25, 0.4) * r, z + Math.sin(a) * d); m.scale.set(r * rnd(0.5, 0.8), r * rnd(0.35, 0.55), r * rnd(0.5, 0.8)); scene.add(m); } }
-canopy(0, 95, 0, 55, 9);
-for (let i = 0; i < 9; i++) { const a = i / 9 * TAU + rnd(0.4), d = rnd(260, 420), x = Math.cos(a) * d, z = Math.sin(a) * d, R = rnd(6, 11), b = terrainH(x, z); const t = new THREE.Mesh(trunkGeo(R, b, 70), barkMat); t.position.set(x, 0, z); scene.add(t); canopy(x, b + 80, z, rnd(35, 50), 6); }
+function canopy(x, y, z, r, n, opt) { const bl = []; for (let i = 0; i < n; i++) { const a = rnd(TAU), d = rnd(0.2, 1) * r; const b = [x + Math.cos(a) * d, y + rnd(-0.25, 0.4) * r, z + Math.sin(a) * d, r * rnd(0.5, 0.8), r * rnd(0.35, 0.55), r * rnd(0.5, 0.8)]; bl.push(b);
+  const m = new THREE.Mesh(blobG, leafMat); m.position.set(b[0], b[1], b[2]); m.scale.set(b[3], b[4], b[5]).multiplyScalar(MP ? 0.93 : 1); scene.add(m); }
+  if (MP && opt) { leafShell(bl, { size: opt.size, dens: opt.dens, ta: '0.05,0.15,0.03', tb: '0.30,0.48,0.08' }); crownLimbs(x, opt.base, z, opt.R, bl, y); }
+  return bl; }
+canopy(0, 95, 0, 55, 9, { size: 16, R: ROUT * 0.85, base: 70 });
+for (let i = 0; i < 9; i++) { const a = i / 9 * TAU + rnd(0.4), d = rnd(260, 420), x = Math.cos(a) * d, z = Math.sin(a) * d, R = rnd(6, 11), b = terrainH(x, z); const t = new THREE.Mesh(trunkGeo(R, b, 70), barkMat); t.position.set(x, 0, z); scene.add(t); canopy(x, b + 80, z, rnd(35, 50), 6, { size: 20, dens: 1.3, R: R * 0.85, base: b + 58 }); }
 // the dew run: a worn little track through thick grass, threading under the dew arches
 const DEWPATH = (() => { const H = HILLS[0], A = new V3(FDIR.x * 135, 0, FDIR.z * 135), B = new V3(H.x + Math.cos(Math.atan2(-H.z, -H.x) + 0.5) * (H.r + 12), 0, H.z + Math.sin(Math.atan2(-H.z, -H.x) + 0.5) * (H.r + 12));
   const N = 7, pts = [], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz), sx = -dz / L, sz = dx / L;
@@ -675,6 +758,32 @@ function dewPathD(x, z) { const b = DEWPATH.box; if (x < b[0] || x > b[1] || z <
     alb=mix(vec3(0.20,0.24,0.08),alb,smoothstep(0.1,0.4,ed));
     gl_FragColor=vec4(finish(shade(alb,n,vW,0.03,0.0),vW),al); }`, { transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 1; scene.add(mesh); }
+// model pass grass: tufts of three slim, twisting blades with a midrib, dry tips and the odd seed spike
+function GRASS_MP() { return mat(`varying float vH; varying float vT; varying float vSeed; varying float vR;
+void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015);
+  vec3 tipc=mix(vec3(0.30,0.50,0.09),vec3(0.46,0.50,0.16),smoothstep(0.45,0.7,patchy));
+  vec3 alb=mix(vec3(0.025,0.08,0.015),tipc,smoothstep(0.0,0.75,vH))*vT*(0.85+0.3*vR);
+  alb*=0.8+0.32*(1.0-smoothstep(0.0,0.14,abs(vL.x)));
+  float dry=smoothstep(0.8,1.0,vH)*step(0.5,vR); alb=mix(alb,vec3(0.52,0.44,0.20),dry*0.7);
+  alb=mix(alb,vec3(0.50,0.42,0.22)*(0.75+0.5*vnoise(vec2(vL.x*9.0,vH*60.0))),vSeed*smoothstep(0.5,0.6,vH));
+  gl_FragColor=vec4(finish(shade(alb,n,vW,0.3*vH,0.9),vW),1.0); }`, { side: THREE.DoubleSide, vert: `
+attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT; varying float vSeed; varying float vR;
+void main(){ float bi=position.z, y=position.y, sd=position.x;
+  float r1=fract(sin(aPar.z*12.9898+bi*78.233)*43758.5453), r2=fract(r1*91.7+bi*0.37);
+  float seed=step(bi,0.5)*step(fract(aPar.z*3.71),0.07);
+  float h=aPar.x*(0.65+0.45*r1)*(1.0+0.35*seed);
+  float ang=aPar.y+bi*2.2+r2*0.8, c=cos(ang), s=sin(ang);
+  vec2 bo=vec2(cos(bi*2.4+aPar.z),sin(bi*2.4+aPar.z))*0.32*step(0.5,bi);
+  float wid=mix(0.3*(0.8+0.4*r2)*(1.0-pow(y,1.5)*0.9), mix(0.06,0.3,smoothstep(0.6,0.75,y)), seed);
+  float bend=y*y*(0.8+sin(uTime*1.2+aPar.z+bi+aOff.x*0.04+aOff.z*0.03)*0.7)*h*0.2*(1.0+0.6*r1)*(1.0-0.6*seed);
+  float tw=y*(r2-0.5)*1.8;
+  vec3 l=vec3(sd*wid*cos(tw), y*h-0.3*bend*bend/max(h,1.0), bend+sd*wid*sin(tw));
+  vec3 w=aOff+vec3(bo.x,0.0,bo.y)+vec3(l.x*c-l.z*s, l.y, l.x*s+l.z*c);
+  vW=w; vL=vec3(sd,y,bi); vC=vec3(1.0); vUv=vec2(0.0); vN=normalize(vec3(-s,0.0,c)*0.7+vec3(c,0.0,s)*sd*0.7+vec3(0.0,0.5+y*0.4,0.0)); vH=y; vT=aPar.w; vSeed=seed; vR=r2;
+  gl_Position=projectionMatrix*viewMatrix*vec4(w,1.0); }` }); }
+function grassTuftGeo(g) { const P = [], I = []; for (let b = 0; b < 3; b++) { const o = b * 9; for (const y of [0, 0.3, 0.55, 0.78]) P.push(-0.5, y, b, 0.5, y, b); P.push(0, 1, b);
+  for (let s = 0; s < 3; s++) { const k = o + s * 2; I.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } I.push(o + 6, o + 7, o + 8); }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); }
 // grass
 let grassMesh;
 {
@@ -685,9 +794,9 @@ let grassMesh;
   while (n < N + NB && guard++ < N * 4) { const a = rnd(TAU), d = Math.sqrt(Math.random()) * 330 + 14, x = Math.cos(a) * d, z = Math.sin(a) * d, h = terrainH(x, z); if (h < WY + 0.6 || dewPathD(x, z) < 2.4 || brookD(x, z) < BROOK.hw + 0.6 || Math.abs(Math.hypot(x - HOLLOW.x, z - HOLLOW.z) - HOLLOW.r) < 1.6 || hollowRootD(x, z) < 3.4) continue;
     off[n * 3] = x; off[n * 3 + 1] = h - 0.2; off[n * 3 + 2] = z; par[n * 4] = rnd(4, 11) * (h < WY + 3 ? 1.5 : 1); par[n * 4 + 1] = rnd(TAU); par[n * 4 + 2] = rnd(TAU); par[n * 4 + 3] = rnd(0.7, 1.25); n++; }
   const g = new THREE.InstancedBufferGeometry(); g.instanceCount = n;
-  g.setAttribute('position', new THREE.Float32BufferAttribute([-.5, 0, 0, .5, 0, 0, -.5, .5, 0, .5, .5, 0, 0, 1, 0], 3)); g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
+  if (MP) grassTuftGeo(g); else { g.setAttribute('position', new THREE.Float32BufferAttribute([-.5, 0, 0, .5, 0, 0, -.5, .5, 0, .5, .5, 0, 0, 1, 0], 3)); g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]); }
   g.setAttribute('aOff', new THREE.InstancedBufferAttribute(off, 3)); g.setAttribute('aPar', new THREE.InstancedBufferAttribute(par, 4));
-  const m = mat(`varying float vH; varying float vT; void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015); vec3 alb=mix(vec3(0.03,0.10,0.02),mix(vec3(0.30,0.50,0.09),vec3(0.46,0.50,0.16),smoothstep(0.45,0.7,patchy)),vH)*vT; alb*=0.85+0.25*(1.0-smoothstep(0.0,0.1,abs(vL.x)));
+  const m = MP ? GRASS_MP() : mat(`varying float vH; varying float vT; void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015); vec3 alb=mix(vec3(0.03,0.10,0.02),mix(vec3(0.30,0.50,0.09),vec3(0.46,0.50,0.16),smoothstep(0.45,0.7,patchy)),vH)*vT; alb*=0.85+0.25*(1.0-smoothstep(0.0,0.1,abs(vL.x)));
     alb=mix(alb,vec3(0.5,0.45,0.18),smoothstep(0.85,1.0,vH)*step(1.1,vT));
     gl_FragColor=vec4(finish(shade(alb,n,vW,0.25*vH,0.9),vW),1.0); }`, { side: THREE.DoubleSide, vert: `
     attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT;
@@ -871,11 +980,12 @@ const fringeMat = (blossom) => mat(`void main(){ vec3 n=NORMAL;
 function addFringe(im, blossom) { const f = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.13, 3), fringeMat(blossom), im.count); f.instanceMatrix = im.instanceMatrix; f.frustumCulled = false; scene.add(f); return f; }
 // ================= ORCHARD ZONE, HEDGE, LOG, WEBS, WASPS =================
 // layout is generated from a fixed seed so landmarks stay put between visits
-const blossomMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.45+vW.y*0.3); float b=fbm(vW.xz*1.4+vW.y*1.1); float sp=vnoise(vW.xz*7.0+vW.y*5.0);
+const blossomMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.45+vW.y*0.3); float b=fbm(vW.xz*${MP ? '0.3' : '1.4'}+vW.y*${MP ? '0.25' : '1.1'}); float sp=${MP ? '0.55' : 'vnoise(vW.xz*7.0+vW.y*5.0)'};
   n=normalize(n+(vec3(fbm(vW.yz*1.3),fbm(vW.xz*1.3),fbm(vW.xy*1.3))-0.5)*1.2);
   vec3 leaf=mix(vec3(0.05,0.14,0.03),vec3(0.24,0.40,0.07),a);
   vec3 bl=mix(vec3(0.92,0.38,0.58),vec3(1.0,0.80,0.84),sp*sp)*(0.8+0.3*sp);
   vec3 alb=mix(leaf,bl,smoothstep(0.38,0.55,b+0.15*sp)*0.92);
+  alb*=${MP ? '0.55' : '1.0'};
   gl_FragColor=vec4(finish(shade(alb,n,vW,0.02,0.8),vW),1.0); }`);
 const hedgeMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.25+vW.y*0.2); float b=vnoise(vW.xy*1.1+vW.z*0.9);
   n=normalize(n+(vec3(fbm(vW.yz*1.7),fbm(vW.xz*1.7),fbm(vW.xy*1.7))-0.5)*1.4);
@@ -896,8 +1006,8 @@ const hedgeMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.25+vW.y*0.
     t.blobs = blobs.slice(b0);
   }
   const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), blossomMat, blobs.length), m4 = new M4(), q = new Q4();
-  blobs.forEach((b, i) => { q.setFromEuler(new THREE.Euler(srnd(-0.3, 0.3), srnd(TAU), srnd(-0.3, 0.3))); m4.compose(new V3(b[0], b[1], b[2]), q, new V3(b[3], b[4], b[3])); im.setMatrixAt(i, m4); });
-  im.frustumCulled = false; scene.add(im); addFringe(im, true);
+  blobs.forEach((b, i) => { q.setFromEuler(new THREE.Euler(srnd(-0.3, 0.3), srnd(TAU), srnd(-0.3, 0.3))); m4.compose(new V3(b[0], b[1], b[2]), q, new V3(b[3], b[4], b[3]).multiplyScalar(MP ? 0.93 : 1)); im.setMatrixAt(i, m4); });
+  im.frustumCulled = false; scene.add(im); if (MP) { leafShell(blobs, { size: 6, ta: '0.06,0.16,0.03', tb: '0.30,0.46,0.09', blos: 0.55 }); for (const t of orchTrees) crownLimbs(t.x, t.top - t.cr * 0.45, t.z, t.R, t.blobs, t.top); } else addFringe(im, true);
   // hedge ring with two gaps
   const hb = [];
   for (let a = 0; a < TAU; a += 3.4 / HEDGE_R) {
@@ -990,7 +1100,7 @@ const WEB_FRAG = `uniform float uR;
 // ================= ROUND 6: the forest edge, life on the pond, scent stones =================
 const forestLeafMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.35+vW.y*0.3); float b=vnoise(vW.xz*2.1+vW.y*1.7);
   n=normalize(n+(vec3(fbm(vW.yz*1.5),fbm(vW.xz*1.5),fbm(vW.xy*1.5))-0.5)*1.3);
-  vec3 alb=mix(vec3(0.03,0.09,0.02),vec3(0.20,0.34,0.05),a)*(0.75+0.45*b); alb=mix(alb,vec3(0.45,0.38,0.06),smoothstep(0.8,0.95,b)*0.5);
+  vec3 alb=mix(vec3(0.03,0.09,0.02),vec3(0.20,0.34,0.05),a)*(0.75+0.45*b); alb=mix(alb,vec3(0.45,0.38,0.06),smoothstep(0.8,0.95,b)*0.5); alb*=${MP ? '0.5' : '1.0'};
   gl_FragColor=vec4(finish(shade(alb,n,vW,0.03,0.9),vW),1.0); }`);
 {
   const blobs = [], fr = FOREST.rnd;
@@ -1001,8 +1111,8 @@ const forestLeafMat = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.35+vW
     blobs.push(...t.blobs);
   }
   const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), forestLeafMat, blobs.length), m4 = new M4(), q = new Q4();
-  blobs.forEach((b, i) => { q.setFromEuler(new THREE.Euler(fr(-0.3, 0.3), fr(0, TAU), fr(-0.3, 0.3))); m4.compose(new V3(b[0], b[1], b[2]), q, new V3(b[3], b[4], b[3])); im.setMatrixAt(i, m4); });
-  im.frustumCulled = false; scene.add(im); addFringe(im, false);
+  blobs.forEach((b, i) => { q.setFromEuler(new THREE.Euler(fr(-0.3, 0.3), fr(0, TAU), fr(-0.3, 0.3))); m4.compose(new V3(b[0], b[1], b[2]), q, new V3(b[3], b[4], b[3]).multiplyScalar(MP ? 0.93 : 1)); im.setMatrixAt(i, m4); });
+  im.frustumCulled = false; scene.add(im); if (MP) { leafShell(blobs, { size: 5.5, ta: '0.04,0.12,0.03', tb: '0.24,0.38,0.07' }); for (const t of forestTrees) crownLimbs(t.x, t.top - t.cr * 0.4, t.z, t.R, t.blobs, t.top); } else addFringe(im, false);
   // webs strung between close trunks
   let n = 0;
   for (let i = 0; i < forestTrees.length && n < 6; i++) { const t = forestTrees[i]; let best = null, bd = 1e9;
@@ -1244,6 +1354,7 @@ addEventListener('blur', () => keys.clear());
 const PR = 0.36;
 function trunkR(y) { return ROUT + Math.max(0, -1 - y) * 0.42; }
 function collide(p, v) {
+  if (MP) limbCollide(p, v);
   const rad = Math.hypot(p.x, p.z), dT = Math.hypot(p.y - TY, p.z);
   if (p.x > 0 && dT < TR && rad > RIN - 1.2 && rad < ROUT + 1.2) { // tunnel
     if (rad > RIN - PR && rad < ROUT + PR && dT > TR - PR) { const k = (TR - PR) / dT; p.y = TY + (p.y - TY) * k; p.z *= k; }
@@ -2006,6 +2117,7 @@ const casters = [], hidden = [];
 scene.traverse(o => {
   if (!o.isMesh && !o.isInstancedMesh) { if (o.isPoints || o.isSprite) hidden.push(o); return; }
   let p = o; while (p) { if (p === camera) { hidden.push(o); return; } p = p.parent; }
+  if (o.userData.noShadow) { hidden.push(o); return; }
   if (o === sky || o.material.transparent || o.material.blending === THREE.AdditiveBlending) { hidden.push(o); return; }
   casters.push({ o, m: o.material, d: o === grassMesh ? grassDepthMat : depthMat });
 });
@@ -2491,4 +2603,4 @@ function updateHomePull(dt) {
   if (d < 5) { const c = Math.min(1, dt * 7); P.pos.y += (TY - P.pos.y) * c; P.pos.z += (0 - P.pos.z) * c; }
 }
 
-window.__g = { HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+window.__g = { MP, MPSTAT, LIMBS, HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };

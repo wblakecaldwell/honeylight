@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Honeylight wasp sounds</title>
+<style>
+body{margin:0;font:16px/1.5 Georgia,serif;background:#1b140b;color:#f2e4c6;}
+main{max-width:720px;margin:0 auto;padding:28px 20px 60px;}
+h1{font-size:26px;margin:0 0 6px;color:#ffd27a}
+p.lead{margin:0 0 22px;color:#d9c7a3}
+.card{background:#2a1f12;border:1px solid #4a3820;border-radius:12px;padding:16px 18px;margin:0 0 14px}
+.card h2{margin:0 0 4px;font-size:19px;color:#ffcf6a}
+.card p{margin:0 0 12px;color:#d9c7a3;font-size:15px}
+button{font:inherit;font-size:14px;background:#4a3518;color:#ffe9bd;border:1px solid #7a5a2a;border-radius:8px;padding:7px 12px;margin:0 6px 6px 0;cursor:pointer}
+button:hover{background:#5d4320} button.on{background:#b07a22;color:#1b140b;border-color:#e0a440}
+.row{display:flex;align-items:center;gap:10px;margin:14px 0 0;font-size:14px;color:#c9b38a}
+input[type=range]{accent-color:#e0a440}
+.stop{background:#3a1d14;border-color:#7a3a2a}
+</style></head><body><main>
+<h1>Wasp sounds: pick one</h1>
+<p class="lead">Each option has three clips. <b>Patrol</b> is a wasp idling nearby. <b>Fly-by</b> is a chasing wasp that swoops in from the left and passes you. <b>Chase</b> is a wasp locked on, right behind you. Headphones help with the left-to-right pass.</p>
+<div id="list"></div>
+<div class="row"><span>Volume</span><input id="vol" type="range" min="0" max="1" step="0.01" value="0.7"><button class="stop" id="stop">Stop</button></div>
+</main>
+<script>
+let ctx=null, master=null, cur=null, raf=0;
+function ac(){ if(!ctx){ ctx=new (window.AudioContext||window.webkitAudioContext)(); master=ctx.createGain(); master.gain.value=+document.getElementById('vol').value; master.connect(ctx.destination);} if(ctx.state==='suspended') ctx.resume(); return ctx; }
+document.getElementById('vol').oninput=e=>{ if(master) master.gain.value=+e.target.value; };
+const set=(p,v,t=0.06)=>p.setTargetAtTime(v,ctx.currentTime,t);
+function shaper(k){ const s=ctx.createWaveShaper(), n=1024, c=new Float32Array(n); for(let i=0;i<n;i++){ const x=i/n*2-1; c[i]=Math.tanh(x*k);} s.curve=c; return s; }
+function noiseSrc(){ const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate), d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; const s=ctx.createBufferSource(); s.buffer=b; s.loop=true; return s; }
+// each voice: build(out) -> { update(near 0..1, closing -1..1, angry 0/1), stop() }
+const OPTIONS=[
+ { id:'now', name:'Current sound', desc:'What the game plays today, for comparison: a mid-pitched buzzy whine.',
+   build(out){ const o1=ctx.createOscillator(), o2=ctx.createOscillator(); o1.type='sawtooth'; o2.type='square'; const f=ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1500; f.Q.value=1.1; const g=ctx.createGain(); g.gain.value=0;
+     const l=ctx.createOscillator(), lg=ctx.createGain(); l.frequency.value=27; lg.gain.value=22; l.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency); o1.connect(f); o2.connect(f); f.connect(g); g.connect(out); [o1,o2,l].forEach(o=>o.start());
+     return { update(n,c,a){ const b=340+c*90+(a?40:0); set(o1.frequency,b); set(o2.frequency,b*1.505); set(g.gain,n*n*(a?0.5:0.22)); }, stop(){ [o1,o2,l].forEach(o=>o.stop()); } }; } },
+ { id:'hornet', name:'A. Hornet drone', desc:'Low, heavy and gritty, like a big hornet. Two detuned saws and a sub-octave, run through distortion, with a rough wingbeat flutter. You feel it before you see it.',
+   build(out){ const o1=ctx.createOscillator(), o2=ctx.createOscillator(), sub=ctx.createOscillator(); o1.type=o2.type='sawtooth'; sub.type='triangle';
+     const mix=ctx.createGain(); mix.gain.value=0.5; const sh=shaper(3.5), lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1400; lp.Q.value=2.5;
+     const trem=ctx.createGain(); trem.gain.value=0.75; const am=ctx.createOscillator(), amg=ctx.createGain(); am.frequency.value=118; amg.gain.value=0.25; am.connect(amg); amg.connect(trem.gain);
+     const g=ctx.createGain(); g.gain.value=0; [o1,o2,sub].forEach(o=>o.connect(mix)); mix.connect(sh); sh.connect(lp); lp.connect(trem); trem.connect(g); g.connect(out); [o1,o2,sub,am].forEach(o=>o.start());
+     return { update(n,c,a){ const b=175+c*45+(a?25:0); set(o1.frequency,b); set(o2.frequency,b*1.012); set(sub.frequency,b/2); set(lp.frequency,900+n*1400+(a?600:0)); set(g.gain,n*n*(a?0.55:0.25)); }, stop(){ [o1,o2,sub,am].forEach(o=>o.stop()); } }; } },
+ { id:'whine', name:'B. Sour whine', desc:'Two high tones a hair apart that clash and beat against each other, so it never sounds settled. Thin and nasty, like a mosquito with a grudge. It rises in pitch when it locks on.',
+   build(out){ const o1=ctx.createOscillator(), o2=ctx.createOscillator(); o1.type='sawtooth'; o2.type='sawtooth'; const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2400; bp.Q.value=3;
+     const wob=ctx.createOscillator(), wg=ctx.createGain(); wob.frequency.value=5.5; wg.gain.value=14; wob.connect(wg); wg.connect(o1.frequency); wg.connect(o2.frequency);
+     const g=ctx.createGain(); g.gain.value=0; o1.connect(bp); o2.connect(bp); bp.connect(g); g.connect(out); [o1,o2,wob].forEach(o=>o.start());
+     return { update(n,c,a){ const b=520+c*120+(a?110:0); set(o1.frequency,b); set(o2.frequency,b*1.059); set(bp.frequency,2000+b*0.8); set(g.gain,n*n*(a?0.42:0.18)); }, stop(){ [o1,o2,wob].forEach(o=>o.stop()); } }; } },
+ { id:'dive', name:'C. Angry diver', desc:'A raspy buzz with a strong Doppler swoop: it climbs as it closes in and drops away as it passes. When it is chasing, it spits short angry "zzt" spikes, like it is lunging at you.',
+   build(out){ const o=ctx.createOscillator(); o.type='sawtooth'; const nz=noiseSrc(), nb=ctx.createBiquadFilter(); nb.type='bandpass'; nb.frequency.value=3000; nb.Q.value=1.5; const ng=ctx.createGain(); ng.gain.value=0.25;
+     const sh=shaper(2.2), bp=ctx.createBiquadFilter(); bp.type='peaking'; bp.frequency.value=1800; bp.gain.value=9; const g=ctx.createGain(); g.gain.value=0; const sp=ctx.createGain(); sp.gain.value=1;
+     o.connect(sh); nz.connect(nb); nb.connect(ng); ng.connect(sh); sh.connect(bp); bp.connect(sp); sp.connect(g); g.connect(out); o.start(); nz.start(); let next=0, ang=0;
+     return { update(n,c,a){ ang=a; const b=260*(1+c*0.35)+(a?30:0); set(o.frequency,b,0.03); set(g.gain,n*n*(a?0.5:0.22));
+       if(a && ctx.currentTime>next){ next=ctx.currentTime+0.5+Math.random()*0.9; const t=ctx.currentTime; o.frequency.cancelScheduledValues(t); o.frequency.setValueAtTime(b,t); o.frequency.linearRampToValueAtTime(b*1.6,t+0.05); o.frequency.linearRampToValueAtTime(b,t+0.22); sp.gain.cancelScheduledValues(t); sp.gain.setValueAtTime(1,t); sp.gain.linearRampToValueAtTime(1.9,t+0.04); sp.gain.linearRampToValueAtTime(1,t+0.25); } },
+       stop(){ o.stop(); nz.stop(); } }; } },
+ { id:'swarm', name:'D. Swarm', desc:'Several wasp voices layered, each wobbling on its own, so even one wasp sounds like trouble and a nest raid sounds like a cloud. It thickens as more wasps chase you (the clips use three).',
+   build(out){ const vs=[], g=ctx.createGain(); g.gain.value=0; const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2600; lp.connect(g); g.connect(out);
+     for(let i=0;i<5;i++){ const o=ctx.createOscillator(); o.type=i%2?'sawtooth':'square'; const w=ctx.createOscillator(), wg=ctx.createGain(); w.frequency.value=3+Math.random()*6; wg.gain.value=10+Math.random()*16; w.connect(wg); wg.connect(o.frequency);
+       const vg=ctx.createGain(); vg.gain.value=i<3?0.22:0; o.connect(vg); vg.connect(lp); o.start(); w.start(); vs.push({o,w,vg,d:0.94+Math.random()*0.14}); }
+     return { update(n,c,a){ const b=240+c*70+(a?35:0); vs.forEach((v,i)=>{ set(v.o.frequency,b*v.d*(i===4?2:1)); set(v.vg.gain, i<(a?4:3)?0.2:(a?0.08:0)); }); set(lp.frequency,1600+n*2000); set(g.gain,n*n*(a?0.5:0.24)); },
+       stop(){ vs.forEach(v=>{ v.o.stop(); v.w.stop(); }); } }; } },
+];
+let panner=null;
+function stopAll(){ cancelAnimationFrame(raf); if(cur){ try{cur.stop();}catch(e){} cur=null; } document.querySelectorAll('button.on').forEach(b=>b.classList.remove('on')); }
+function play(opt, clip, btn){ ac(); stopAll(); btn.classList.add('on'); panner=ctx.createStereoPanner?ctx.createStereoPanner():ctx.createGain(); panner.connect(master); cur=opt.build(panner); const st=cur.stop; cur.stop=()=>{ st(); panner.disconnect(); };
+  const t0=performance.now(), dur= clip==='flyby'?4200:4000;
+  const step=()=>{ const t=(performance.now()-t0)/1000; let n,c,a,pan;
+    if(clip==='patrol'){ n=0.45+0.12*Math.sin(t*1.3); c=0.15*Math.sin(t*0.9); a=0; pan=0.6*Math.sin(t*0.7); }
+    else if(clip==='chase'){ n=0.95+0.05*Math.sin(t*3); c=0.25+0.15*Math.sin(t*2.1); a=1; pan=0.25*Math.sin(t*1.7); }
+    else { const x=(t-2.0)*14; const d=Math.hypot(x,2.5); n=Math.max(0,1-d/40); c=Math.max(-1,Math.min(1,-x/Math.max(d,1))); a=1; pan=Math.max(-1,Math.min(1,x/10)); }
+    const fade=Math.min(1,t*4)*Math.min(1,Math.max(0,(dur/1000-t)*4)); cur.update(n*fade,c,a); if(panner.pan) panner.pan.setTargetAtTime(pan,ctx.currentTime,0.05);
+    if(t<dur/1000) raf=requestAnimationFrame(step); else stopAll(); };
+  step(); }
+const list=document.getElementById('list');
+OPTIONS.forEach(o=>{ const d=document.createElement('div'); d.className='card'; d.innerHTML=`<h2>${o.name}</h2><p>${o.desc}</p>`;
+  [['patrol','Patrol'],['flyby','Fly-by'],['chase','Chase']].forEach(([k,l])=>{ const b=document.createElement('button'); b.textContent='▶ '+l; b.onclick=()=>play(o,k,b); d.appendChild(b); }); list.appendChild(d); });
+document.getElementById('stop').onclick=stopAll;
+</script></body></html>
