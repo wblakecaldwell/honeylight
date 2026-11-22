@@ -1,5 +1,7 @@
 # Honeylight
 
+**[Play it in your browser](https://blakecaldwell.net/honeylight/)**
+
 Honeylight: a browser game where you live one short life as a honeybee. FPV-drone-style flight through a giant meadow, built with three.js. Work in progress.
 
 ![Scenes from Honeylight](tile.png)
