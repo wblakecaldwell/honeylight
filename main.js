@@ -475,7 +475,9 @@ const wingMat = mat(`void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW); floa
   float vein=1.0-smoothstep(0.0,0.07,sqrt(d2)-sqrt(d1));
   float lead=1.0-smoothstep(0.0,0.018,abs(-p.y-0.075*sin(clamp(p.x/0.56,0.0,1.0)*3.1416)-0.01)); vein=max(vein,lead*step(p.x,0.5));
   vec3 film=0.5+0.5*cos(6.2832*(vec3(0.0,0.33,0.67)+(1.0-cv)*1.7+vnoise(p*18.0)*0.7));
-  vec3 mem=shade(vec3(0.82,0.82,0.78),n,vW,1.6,1.0)*0.25+film*(0.12+0.5*f)*0.6;
+  film=mix(vec3(dot(film,vec3(0.333))),film,0.35)*vec3(1.0,0.94,0.82); // soft, warm sheen, not neon
+  vec3 lit=shade(vec3(1.0),n,vW,0.0,1.0); float lum=min(dot(lit,vec3(0.3,0.5,0.2)),1.5);
+  vec3 mem=shade(vec3(0.82,0.82,0.78),n,vW,1.6,1.0)*0.25+film*(0.12+0.5*f)*0.3*lum;
   vec3 c=mix(mem,shade(vec3(0.10,0.07,0.04),n,vW,0.4,0.2),vein*0.85);
   gl_FragColor=vec4(finish(c,vW),clamp(0.05+0.25*f+vein*0.6,0.0,0.95)); }`, { transparent: true, depthWrite: false, side: THREE.DoubleSide });
 const wingMesh = new THREE.InstancedMesh(wingGeo, wingMat, MAXB * 2); wingMesh.frustumCulled = false; scene.add(wingMesh);
@@ -1951,10 +1953,11 @@ function updateHome(dt) {
   const tg = P.mode === 'fly' && !inHive ? (P.pollen > 0 ? 1 : 0.4) * smooth(45, 100, L) : 0; U.uHomeK.value += (tg - U.uHomeK.value) * Math.min(1, dt * 0.8);
   if (!G.seenHome && P.pollen >= G.cap && L > 120) { G.seenHome = true; hint('bees read the light in the sky: a faint shimmer stands over home', 6); }
 }
-function updateRound6(dt) { updateBatch2(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
+function updateRound6(dt) { updateHomePull(dt); updateBatch2(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
 applyDayLight();
 G.orchard = !!G.zones.garden;
 function beeCollide() {
+  if (P.pos.x > RIN - 2 && Math.hypot(P.pos.y - TY, P.pos.z) < TR + 2.5 && P.pos.x < ROUT + 7) return; // sisters make way at the entrance
   for (const b of bees) { if (b === me || b.s.y < 0.05) continue; const rr = 0.4 * b.s.y + PR; const dx = P.pos.x - b.p.x, dy = P.pos.y - b.p.y, dz = P.pos.z - b.p.z;
     if (Math.abs(dx) > rr || Math.abs(dy) > rr || Math.abs(dz) > rr) continue; const d = Math.hypot(dx, dy, dz); if (d >= rr) continue;
     const nx = d > 1e-4 ? dx / d : 0, ny = d > 1e-4 ? dy / d : 1, nz = d > 1e-4 ? dz / d : 0; P.pos.set(b.p.x + nx * rr, b.p.y + ny * rr, b.p.z + nz * rr);
@@ -2044,6 +2047,7 @@ const __post = window.__post = (() => {
     void main(){ vec3 a=S(vec2(-1,-1)),b=S(vec2(1,-1)),c=S(vec2(-1,1)),d=S(vec2(1,1)),e=S(vec2(0,0));
       vec3 f=S(vec2(-2,0)),g=S(vec2(2,0)),h=S(vec2(0,-2)),i=S(vec2(0,2)),j=S(vec2(-2,-2)),k=S(vec2(2,-2)),l=S(vec2(-2,2)),m=S(vec2(2,2));
       vec3 col=(a+b+c+d)*0.125+e*0.125+(f+g+h+i)*0.0625+(j+k+l+m)*0.03125;
+      if(!(col.r==col.r && col.g==col.g && col.b==col.b) || max(col.r,max(col.g,col.b))>6e4) col=vec3(0.0); col=max(col,vec3(0.0));
       if(uPre>0.5){ col=min(col,vec3(40.0)); float br=max(col.r,max(col.g,col.b)); float th=1.5, kn=0.6;
         float s=clamp(br-th+kn,0.0,2.0*kn); s=s*s/(4.0*kn+1e-4); col*=max(s,br-th)/max(br,1e-4); }
       gl_FragColor=vec4(col,1.0); }`, { tSrc: { value: null }, uTex: { value: new THREE.Vector2() }, uPre: { value: 0 } });
@@ -2055,6 +2059,8 @@ const __post = window.__post = (() => {
     vec3 aces(vec3 c){ return (c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14); }
     void main(){
       vec3 c=texture2D(tScene,vUv).rgb; vec3 b=texture2D(tBloom,vUv).rgb;
+      if(!(c.r==c.r && c.g==c.g && c.b==c.b) || max(c.r,max(c.g,c.b))>6e4) c=vec3(0.0); if(!(b.r==b.r && b.g==b.g && b.b==b.b) || max(b.r,max(b.g,b.b))>6e4) b=vec3(0.0);
+      c=max(c,vec3(0.0)); b=max(b,vec3(0.0));
       c=c+b*uBloom;
       c*=uExpo;
       // golden-hour grade: warm highlights, slightly cool shadows, a touch more saturation
@@ -2474,5 +2480,15 @@ G.calmT = 0; G.calmAt = 5;
 function updateCalm(dt) { if (G.revenge >= G.calmAt) { G.calmAt += 5; G.calmT = 60; toast('<b>The wasps are rattled</b><br><span>they keep their distance for a while</span>', 4); [0, 4, 7].forEach((n, k) => tone(SCALE[n], 0.08, 1.6, 'sine', k * 0.1)); }
   if (G.calmT > 0) { G.calmT -= dt; for (const w of wasps) if (w.state === 'chase' && !w.calmed) { w.state = 'retreat'; w.t = 0; w.decoy = null; } } }
 function updateBatch2(dt) { updateBranches(dt); updateGusts(dt); updateBrook(dt); updateCalm(dt); }
+
+// coming home: the scent of the hive draws a bee in. Heading for the entrance gently lines you up with the tunnel
+const _hm = new V3(ROUT + 0.8, TY, 0), _hi = new V3(RIN - 0.5, TY, 0), _hd = new V3();
+function updateHomePull(dt) {
+  if (P.mode !== 'fly' || inHive) return; const d = P.pos.distanceTo(_hm); if (d > 18 || P.pos.x < ROUT - 1) return;
+  const sp = P.vel.length(); if (sp < 1.5) return; _hd.copy(_hm).sub(P.pos).normalize(); if (d < 6 ? P.vel.x > -0.5 : P.vel.dot(_hd) < 0.45 * sp) return; // only when you are already heading in
+  const k = 1 - d / 18; const tgt = d < 5 ? _hi : _hm; _hd.copy(tgt).sub(P.pos).normalize();
+  P.vel.lerp(_v.copy(_hd).multiplyScalar(sp), Math.min(1, dt * (1.5 + 5 * k * k)));
+  if (d < 5) { const c = Math.min(1, dt * 7); P.pos.y += (TY - P.pos.y) * c; P.pos.z += (0 - P.pos.z) * c; }
+}
 
 window.__g = { HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
