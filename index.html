@@ -49,6 +49,16 @@
   #toast{position:fixed;left:0;right:0;top:12%;text-align:center;pointer-events:none;opacity:0;transition:opacity .7s;font-size:20px;color:#fff3d6;text-shadow:0 1px 8px #000,0 0 20px rgba(0,0,0,.5);line-height:1.4}
   #toast b{font-weight:normal;color:#ffd98a;font-size:24px}
   #toast span{font-size:15px;font-style:italic;opacity:.85}
+  #keys{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.97);max-width:min(92vw,520px);padding:20px 30px 18px;border-radius:18px;background:radial-gradient(ellipse at 30% 15%,rgba(74,40,10,.9),rgba(24,12,3,.92));border:1px solid rgba(255,220,150,.32);box-shadow:0 10px 50px rgba(0,0,0,.55),inset 0 0 30px rgba(255,170,50,.08);opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;color:#fff3d6;font-size:15px;line-height:1.35}
+  #keys.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  #keys h2{margin:0 0 .55em;font-weight:normal;font-size:23px;color:#ffd98a;letter-spacing:.06em;text-align:center}
+  #keys .k{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;align-items:center}
+  #keys .kk{text-align:right;white-space:nowrap}
+  #keys kbd{display:inline-block;min-width:1.3em;padding:.12em .45em;margin:0 .1em;border:1px solid rgba(255,235,190,.55);border-radius:6px;background:rgba(30,16,4,.5);font-family:inherit;font-size:13px;text-align:center}
+  #keys .dim{opacity:.5;font-style:italic}
+  #keys .foot{margin-top:.9em;text-align:center;font-size:13px;letter-spacing:.3em;text-transform:uppercase;opacity:.65;animation:pulse 2.4s infinite}
+  #keytip{position:fixed;right:16px;bottom:12px;font-size:12px;opacity:0;color:#fff3d6;text-shadow:0 1px 4px #000;pointer-events:none;transition:opacity 1s;letter-spacing:.05em}
+  #keytip kbd{display:inline-block;padding:0 .35em;border:1px solid rgba(255,235,190,.5);border-radius:4px;background:rgba(30,16,4,.4);font-family:inherit;font-size:11px}
 </style>
 </head>
 <body>
@@ -60,6 +70,8 @@
 <div id="hint"></div>
 <div id="hud"></div>
 <div id="toast"></div>
+<div id="keys"></div>
+<div id="keytip"><kbd>Tab</kbd> keys</div>
 <div id="title" class="ov"><h1>Honeylight</h1><p>a small life, beginning</p><div class="go">click to wake</div></div>
 <script type="module" src="./main.js"></script>
 </body>

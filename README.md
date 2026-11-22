@@ -29,6 +29,7 @@ Any static file server works (for example `npx serve`).
 | Q / E | Dart / leap (unlocked with honey) |
 | F | Heat buzz near wasps |
 | R | Call your sisters |
+| Tab (hold) / H | Show the keys card |
 
 Progress is saved in your browser's local storage only.
 

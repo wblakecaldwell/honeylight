@@ -1317,7 +1317,7 @@ try { P.honey = clamp(parseFloat(localStorage.getItem('honeylight.honey')) || 0,
 const keys = new Set(); let touchFwd = false, locked = false, dragging = false;
 const hintEl = $('hint'); let hintTimer = 0;
 function hint(html, secs = 6) { hintEl.innerHTML = html; hintEl.style.opacity = 1; clearTimeout(hintTimer); hintTimer = setTimeout(() => hintEl.style.opacity = 0, secs * 1000); }
-function look(dx, dy) { P.yaw -= dx * 0.0023; P.pitch = clamp(P.pitch - dy * 0.0023, -1.56, 1.56); P.yawRate -= dx * 0.0023; }
+function look(dx, dy) { if (P.mode === 'crawl') { P.ch = (P.ch || 0) - dx * 0.0023; P.cp = clamp((P.cp || 0) - dy * 0.0023, -0.35, 1.35); return; } P.yaw -= dx * 0.0023; P.pitch = clamp(P.pitch - dy * 0.0023, -1.56, 1.56); P.yawRate -= dx * 0.0023; }
 function action() {
   if (wriggle()) return;
   if (P.mode === 'cell') chew();
@@ -1331,7 +1331,7 @@ function chew() {
   _v.set(BIRTH.x, BIRTH.y, BIRTH.z); puff(_v, 5, [0.9, 0.65, 0.25], 0.5, 0.012, 0.9, 1.5);
   if (left.length <= per) { P.mode = 'emerge'; P.t = 0; tone(392, 0.08, 2.2); tone(587.33, 0.07, 2.4, 'sine', 0.25); }
 }
-function takeOff() { P.mode = 'fly'; P.vel.set(0, 1.2, 1.6); sweep(120, 210, 0.5, 0.05, 'sawtooth'); if (!P.flown) { P.flown = true; hint('<kbd>W</kbd> fly &nbsp; <kbd>space</kbd> rise &nbsp; <kbd>shift</kbd> sink', 8); } }
+function takeOff() { P.tkq = camera.quaternion.clone(); P.tk = time; if (P.mode === 'crawl') { const h = P.ch || 0; _v.set(-Math.sin(h) * 0.6, Math.cos(h) * 0.6, 1).normalize(); P.yaw = Math.atan2(-_v.x, -_v.z); P.pitch = clamp(Math.asin(_v.y), -0.5, 0.5); } if (!P.flownAt) P.flownAt = time; P.mode = 'fly'; P.vel.set(0, 1.2, 1.6); sweep(120, 210, 0.5, 0.05, 'sawtooth'); if (!P.flown) { P.flown = true; hint('<kbd>W</kbd> fly &nbsp; <kbd>space</kbd> rise &nbsp; <kbd>shift</kbd> sink', 8); } }
 function rebirth() { P.lives++; P.mode = 'cell'; P.t = 0; P.chews = 0; P.pollen = 0; P.load = []; P.stuck = 0; P.wet = 0; P.wingsReady = false; P.wingT = 0; P.vel.set(0, 0, 0); P.pos.set(BIRTH.x, BIRTH.y, BIRTH.z - 0.72); P.yaw = Math.PI; P.pitch = 0; resetCap(); hero.active = false; fish.userData.mouth.scale.setScalar(0.02); tone(261.6, 0.07, 3); tone(392, 0.05, 3, 'sine', 0.4); }
 $('title').addEventListener('click', () => {
   initAudio(); if (A.ctx && A.ctx.state === 'suspended') A.ctx.resume();
@@ -1340,7 +1340,7 @@ $('title').addEventListener('click', () => {
 });
 function lockPointer() { try { const r = canvas.requestPointerLock && canvas.requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } }
 document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; });
-canvas.addEventListener('mousedown', e => { if (!locked) { lockPointer(); dragging = true; } action(); });
+canvas.addEventListener('mousedown', e => { if (!locked) { lockPointer(); dragging = true; if (resting) { resting = false; showKeys(); return; } } action(); });
 addEventListener('mouseup', () => dragging = false);
 addEventListener('mousemove', e => { if (locked || dragging) look(e.movementX || 0, e.movementY || 0); });
 addEventListener('keydown', e => { if (e.repeat) return; keys.add(e.code); if (e.code === 'Space') { e.preventDefault(); action(); } });
@@ -1399,7 +1399,7 @@ function frame(now) {
 function update(dt) {
   time += dt; P.t += dt;
   U.uTime.value = time;
-  camera.rotation.set(P.pitch, P.yaw, 0); camera.getWorldDirection(fwd); right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  camera.rotation.set(P.pitch, P.yaw, 0); viewBlend(); camera.getWorldDirection(fwd); right.set(1, 0, 0).applyQuaternion(camera.quaternion);
   let kf = (keys.has('KeyW') || keys.has('ArrowUp') || touchFwd ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0), ks = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), ku = (keys.has('Space') ? 1 : 0) - (keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyC') ? 1 : 0);
   if (keys.has('ArrowLeft')) look(-dt * 700, 0); if (keys.has('ArrowRight')) look(dt * 700, 0);
   let black = 0, thrust = 0;
@@ -1417,11 +1417,10 @@ function update(dt) {
   } else if (P.mode === 'emerge') {
     const f = smooth(0, 1.8, P.t); P.pos.set(BIRTH.x, BIRTH.y, lerp(BIRTH.z - 0.62, BIRTH.z + 0.24, f)); P.pos.y += Math.sin(P.t * 9) * 0.012;
     if (P.lives === 1) { hero.active = true; if (!hero.look) hero.look = new V3(); hero.tp.set(BIRTH.x + 0.9, BIRTH.y + 0.35, BIRTH.z + 1.15); hero.look.copy(P.pos); }
-    if (P.t > 1.8) { P.mode = 'crawl'; P.t = 0; heroT = 0; if (P.lives === 1) hint('<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk &nbsp;·&nbsp; mouse look', 7); }
+    if (P.t > 1.8) { P.q0 = camera.quaternion.clone(); P.mode = 'crawl'; P.t = 0; heroT = 0; P.ch = 0; P.cp = 0.2; if (P.lives === 1) hint('<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk &nbsp;·&nbsp; mouse turn &nbsp;·&nbsp; hold <kbd>Tab</kbd> for keys', 8); }
   } else if (P.mode === 'crawl') {
     const c = COMBS[BIRTH.ci];
-    tmp.set(fwd.x, fwd.y, 0); if (tmp.length() < 0.35) { tmp.set(0, 1, 0).applyQuaternion(camera.quaternion); tmp.z = 0; if (fwd.z > 0) tmp.multiplyScalar(-1); } tmp.normalize();
-    _v.set(right.x, right.y, 0); if (_v.lengthSq() > 1e-4) _v.normalize();
+    tmp.set(-Math.sin(P.ch || 0), Math.cos(P.ch || 0), 0); _v.set(tmp.y, -tmp.x, 0);
     const sp = 1.7; P.pos.x += (tmp.x * kf + _v.x * ks) * sp * dt; P.pos.y += (tmp.y * kf + _v.y * ks) * sp * dt;
     P.pos.x = clamp(P.pos.x, -c.hw + 0.3, c.hw - 0.3); P.pos.y = clamp(P.pos.y, c.yb + 0.4, HTOP - 0.5); P.pos.z = c.z + CT / 2 + 0.24; P.cdir.copy(tmp);
     if (kf || ks) bob += dt * 11;
@@ -1494,7 +1493,7 @@ function update(dt) {
   const sv = P.vel.dot(right);
   const targetRoll = P.mode === 'fly' ? clamp(P.yawRate * 2.8 - sv * 0.03, -0.6, 0.6) + Math.sin(time * 2.6) * 0.02 * P.pollen : 0;
   P.roll = lerp(P.roll, targetRoll, Math.min(1, dt * 5));
-  camera.position.copy(camPos); camera.rotation.set(P.pitch, P.yaw, P.roll); camera.updateMatrixWorld(); thirdPerson(dt);
+  camera.position.copy(camPos); camera.rotation.set(P.pitch, P.yaw, P.roll); viewBlend(); camera.updateMatrixWorld(); thirdPerson(dt);
   const spd = P.vel.length(); fov = lerp(fov, 74 + Math.min(9, spd * 0.3), Math.min(1, dt * 3)); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   U.uCam.value.copy(camPos); sky.position.copy(camPos);
   ants.forEach((a, i) => { const s = i ? -1 : 1; a.rotation.x = Math.sin(time * 1.7 + i) * 0.05 + clamp(spd * 0.012, 0, 0.3) + (P.mode === 'cell' ? Math.sin(time * 6 + i * 2) * 0.05 : 0); a.rotation.y = s * (Math.sin(time * 1.3 + i * 2) * 0.06) + P.yawRate * 3; });
@@ -2064,7 +2063,7 @@ function updateHome(dt) {
   const tg = P.mode === 'fly' && !inHive ? (P.pollen > 0 ? 1 : 0.4) * smooth(45, 100, L) : 0; U.uHomeK.value += (tg - U.uHomeK.value) * Math.min(1, dt * 0.8);
   if (!G.seenHome && P.pollen >= G.cap && L > 120) { G.seenHome = true; hint('bees read the light in the sky: a faint shimmer stands over home', 6); }
 }
-function updateRound6(dt) { updateHomePull(dt); updateBatch2(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
+function updateRound6(dt) { tipsTick(); updateHomePull(dt); updateBatch2(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
 applyDayLight();
 G.orchard = !!G.zones.garden;
 function beeCollide() {
@@ -2603,4 +2602,45 @@ function updateHomePull(dt) {
   if (d < 5) { const c = Math.min(1, dt * 7); P.pos.y += (TY - P.pos.y) * c; P.pos.z += (0 - P.pos.z) * c; }
 }
 
-window.__g = { MP, MPSTAT, LIMBS, HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+// ---------- field notes: the controls card (hold Tab / tap H, and the rest screen when the mouse is freed) ----------
+const keysEl = $('keys'), keytipEl = $('keytip');
+let keysHeld = false, keysToggled = false, resting = false, wasLocked = false;
+const TIPS = (() => { try { return JSON.parse(localStorage.getItem('honeylight.tips') || '{}'); } catch (e) { return {}; } })();
+function tipOnce(id, html, secs = 5) { if (TIPS[id]) return false; TIPS[id] = 1; try { localStorage.setItem('honeylight.tips', JSON.stringify(TIPS)); } catch (e) { } hint(html, secs); return true; }
+function keysHTML() {
+  const K = (k) => k.split(' ').map(x => `<kbd>${x}</kbd>`).join(''), row = (k, t, dim) => `<div class="kk${dim ? ' dim' : ''}">${K(k)}</div><div class="${dim ? 'dim' : ''}">${t}</div>`;
+  let h = `<h2>${resting ? 'Resting' : 'Field notes'}</h2><div class="k">`;
+  if (P.mode === 'crawl' || P.mode === 'cell' || P.mode === 'emerge') h += row('W A S D', 'walk the comb') + row('Space', P.wingsReady ? 'take off' : 'take off, once your wings are dry');
+  h += row('Mouse', 'look and steer') + row('W', 'fly forward') + row('S', 'slow down, back up') + row('A D', 'drift sideways') + row('Space', 'rise') + row('Shift', 'sink')
+    + row('V', G.third ? 'back to bee\'s-eye view' : 'see yourself from behind')
+    + row(G.dart ? 'Q' : 'Q', G.dart ? 'dart: a burst of wing strength' : 'dart, when you grow (30 honey)', !G.dart)
+    + row('E', G.leap ? 'leap: spring straight up' : 'leap, when you grow (65 honey)', !G.leap)
+    + row('F', G.heat > 0 ? 'heat buzz: knock wasps out of the air' : 'heat buzz, after a sip of red clover', !(G.heat > 0))
+    + row('R', G.workers >= 3 ? 'call your sisters to ball a wasp' : `call your sisters (needs 3, you have ${G.workers})`, G.workers < 3)
+    + row('Space', 'wriggle free of a web') + row('Tab', 'hold for these notes') + row('Esc', 'rest and free the mouse');
+  return h + `</div>${resting ? '<div class="foot">click to fly on</div>' : ''}`;
+}
+function showKeys() { const on = keysHeld || keysToggled || resting; if (on) keysEl.innerHTML = keysHTML(); keysEl.classList.toggle('on', on); if (on) TIPS.card = 1; }
+addEventListener('keydown', e => { if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) { keysHeld = true; showKeys(); } } else if (e.code === 'KeyH' && !e.repeat) { keysToggled = !keysToggled; showKeys(); } });
+addEventListener('keyup', e => { if (e.code === 'Tab') { keysHeld = false; showKeys(); } });
+addEventListener('blur', () => { keysHeld = false; showKeys(); });
+document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; if (wasLocked && !l && P.mode !== 'title') resting = true; if (l) resting = false; wasLocked = l; keysToggled = false; showKeys(); });
+// gentle first-time nudges, each shown once
+function tipsTick() {
+  if (P.mode === 'title') { keytipEl.style.opacity = 0; return; }
+  keytipEl.style.opacity = keysEl.classList.contains('on') ? 0 : 0.5;
+  if (P.mode !== 'fly') return;
+  if (P.flownAt && time - P.flownAt > 10 && !G.third) tipOnce('v', '<kbd>V</kbd> see yourself from behind', 5);
+  if (P.pollen > 0 && !G.third && TIPS.v && P.flownAt && time - P.flownAt > 20) tipOnce('v2', '<kbd>V</kbd> look back at the pollen on your legs', 5);
+  if (G.workers >= 3 && !inHive && wasps.some(w => w.state === 'chase')) tipOnce('r', '<kbd>R</kbd> call your sisters to help', 5);
+  if (G.heat > 0 && wasps.some(w => w.state !== 'idle' && w.p.distanceTo(P.pos) < 14)) tipOnce('f', '<kbd>F</kbd> blast the wasp with heat', 4);
+  if (P.flownAt && time - P.flownAt > 45) tipOnce('tab', 'hold <kbd>Tab</kbd> any time to see your keys', 5);
+}
+// on the comb: turn with the mouse and walk where you face, with the wax as your floor
+const _cq = new Q4(), _cl = new V3(), _cv = new V3();
+function crawlView() { const h = P.ch || 0, cp = P.cp || 0; _cl.set(-Math.sin(h) * Math.cos(cp), Math.cos(h) * Math.cos(cp), Math.sin(cp));
+  camera.up.set(0, 0, 1); camera.lookAt(_cv.copy(camera.position).add(_cl)); camera.up.set(0, 1, 0);
+  if (P.q0 && P.t < 0.7) { _cq.copy(camera.quaternion); camera.quaternion.slerpQuaternions(P.q0, _cq, smooth(0, 0.7, P.t)); } }
+function viewBlend() { if (P.mode === 'crawl') crawlView(); else if (P.tkq && time - P.tk < 0.5) { _cq.copy(camera.quaternion); camera.quaternion.slerpQuaternions(P.tkq, _cq, smooth(0, 0.5, time - P.tk)); } }
+
+window.__g = { look, takeOff, showKeys, keysHTML, TIPS, MP, MPSTAT, LIMBS, HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
