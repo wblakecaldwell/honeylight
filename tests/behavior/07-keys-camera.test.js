@@ -64,13 +64,14 @@ module.exports = [
 
   { id: 'GEN-002-words', req: 'GEN-002', name: 'No screen text uses drone, course, ring, gate or checkpoint',
     async run(t) {
-      const js = fs.readFileSync(path.join(GAME, 'main.js'), 'utf8'), html = fs.readFileSync(path.join(GAME, 'index.html'), 'utf8');
+      const srcDir = path.join(GAME, 'src'), parts = fs.existsSync(srcDir) ? fs.readdirSync(srcDir).filter(f => f.endsWith('.js')).sort().map(f => path.join(srcDir, f)) : []; /* the game code: main.js and, after the module split, src/ */
+      const js = [path.join(GAME, 'main.js'), ...parts].map(f => fs.readFileSync(f, 'utf8')).join('\n'), html = fs.readFileSync(path.join(GAME, 'index.html'), 'utf8');
       const extra = ['night.js', 'moonflowers.js'].map(f => fs.readFileSync(path.join(GAME, f), 'utf8')).join('\n');
       const strings = screenStrings(js + '\n' + extra), bad = strings.filter(s => BAD.test(s) && !ALLOW.some(a => a.test(s))), htmlBad = (htmlText(html).match(new RegExp(BAD.source, 'gi')) || []);
       // the live page too: everything the title screen, HUD and keys card show
       const live = await t.ev(() => { T.fly(150, 30, 40); T.sim(0.2); return document.body.innerText; }), liveBad = live.match(new RegExp(BAD.source, 'gi')) || [];
-      t.check(strings.length > 40, 'found the screen strings in main.js: ' + strings.length);
-      t.eq(bad, [], 'main.js screen text'); t.eq(htmlBad, [], 'index.html text'); t.eq(liveBad, [], 'text on the page');
+      t.check(strings.length > 40, 'found the screen strings in the game code: ' + strings.length);
+      t.eq(bad, [], 'game code screen text'); t.eq(htmlBad, [], 'index.html text'); t.eq(liveBad, [], 'text on the page');
       return { strings: strings.length, bad: bad.length + htmlBad.length + liveBad.length };
     } },
 ];

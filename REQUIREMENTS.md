@@ -178,8 +178,24 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 - **TST-008** Run all tests before each release. If a test fails, do not publish (see "How to use this document").
 - **TST-009** If a test cannot work until the game is repaired, keep it in a pending list with the reason. Add it to the tests after the repair.
 
+## 13. Code structure
+
+Not approved by the owner yet.
+
+- **MOD-001** `main.js` only builds the game. It has only comments, module imports and setup steps. Each setup step is called one time. Do not change the order of the steps. Do not move code from one step to a different step. The seeded world and the random numbers depend on this order.
+- **MOD-002** Each file in `src/` has one subject. The first line of each file is a `// Honeylight: ...` line that says what is in the file. `src/README.md` has a table of the files.
+- **MOD-003** `src/core.js` and `src/world.js` are the base modules. `core.js` must not import from `src/`. `world.js` must import only from `core.js`.
+- **MOD-004** A function name must say what the function does. Do not use the name of a build round or a batch in a function name.
+- **MOD-005** The night stays in separate files (`night.js`, `moonflowers.js`). Files in `src/` must not import them. One switch (`?night=0`) turns off all of the night (NGT-026).
+- **MOD-006** A move or a rename of code must not change the game. After the change, all tests must pass and all screenshots must match pixel for pixel without `--update`.
+- **MOD-007** Do not put a `//` comment in a one-line function or loop. Use `/* */`.
+- **MOD-008** A name that one module declares must be changed only in that module. Other modules can only read it.
+- **MOD-009** A new load-time step goes at the end of `main.js`. Put it in a different place only if the tests show that the place is safe (MOD-006).
+- **MOD-010** Do not remove or rename a key of `window.__g`. Tests and tools use these keys.
+
 ## Change log
 
+- 2026-11-22: Added MOD-001 to MOD-010 (code structure after the module split). Not approved by the owner yet.
 - 2026-11-22: Added NGT-001 to NGT-030 (the night: moon, moonflowers, fireflies, the hollow grove) and TST-001 to TST-009 (tests). ZON-004 and ZON-005 now happen at moonset (NGT-025). Not approved by the owner yet.
 - 2026-11-22: Removed FLW-007 and WSP-014 (hunter path undone at the owner's request).
 - 2026-11-22: Added FLW-006 (hold on to a flower), FLW-007 (garden nectar), WSP-014 (royal jelly, hunter path), WSP-015 (gardener path, later).
