@@ -22,7 +22,17 @@ const HEDGE_GAPS = [Math.atan2(-ORCH.z, -ORCH.x), Math.atan2(-ORCH.z, -ORCH.x) +
 const HEDGE_TUN = Math.atan2(-ORCH.z, -ORCH.x) - 1.5;
 const inHedgeGap = a => HEDGE_GAPS.some(g => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < HEDGE_GAP_W);
 const HILLS = [{ x: 205, z: -55, r: 75, h: 46 }, { x: -110, z: -175, r: 60, h: 28 }, { x: -235, z: -45, r: 65, h: 34 }, { x: 250, z: 150, r: 70, h: 24 }];
-function terrainH(x, z) {
+// ---------- batch 2: a misty brook, and a bramble hollow reached through a root ----------
+const BROOK = { pts: [[-200, 112], [-222, 128], [-245, 132], [-262, 152], [-275, 178]], hw: 4.2, depth: 4.0, box: [-290, -185, 95, 195] };
+const HOLLOW = { x: 120, z: 230, r: 16, wallH: 9 };
+function brookSeg(x, z) { const b = BROOK.box; if (x < b[0] - 8 || x > b[1] + 8 || z < b[2] - 8 || z > b[3] + 8) return null; let best = 1e9, bs = 0;
+  const P2 = BROOK.pts; for (let i = 0; i < P2.length - 1; i++) { const ax = P2[i][0], az = P2[i][1], dx = P2[i + 1][0] - ax, dz = P2[i + 1][1] - az, L2 = dx * dx + dz * dz; let t = ((x - ax) * dx + (z - az) * dz) / L2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const ex = ax + dx * t - x, ez = az + dz * t - z, d = ex * ex + ez * ez; if (d < best) { best = d; bs = i + t; } } return { d: Math.sqrt(best), s: bs }; }
+const brookD = (x, z) => { const r = brookSeg(x, z); return r ? r.d : 1e9; };
+HOLLOW.a0 = Math.atan2(-HOLLOW.z, -HOLLOW.x) + 0.6;
+function hollowRootD(x, z) { const ux = Math.cos(HOLLOW.a0), uz = Math.sin(HOLLOW.a0), px = x - HOLLOW.x, pz = z - HOLLOW.z, t = clamp(px * ux + pz * uz, 9, 28); return Math.hypot(px - ux * t, pz - uz * t); }
+function terrainH(x, z) { const h0 = terrainBase(x, z); const bs = brookSeg(x, z); return bs ? h0 - BROOK.depth * smooth(BROOK.hw + 3.5, BROOK.hw - 1.0, bs.d) : h0; }
+function terrainBase(x, z) {
   let h = GY + 2.2 * Math.sin(x * 0.021 + 1.3) * Math.cos(z * 0.017) + 1.2 * Math.sin(x * 0.05 + z * 0.043);
   h -= 7.5 * smooth(POND.r + 18, POND.r - 22, Math.hypot(x - POND.x, z - POND.z));
   h += 2.5 * smooth(40, 12, Math.hypot(x, z));
@@ -424,7 +434,7 @@ const beeGeo = (() => {
   return geoParts(parts);
 })();
 
-const MAXB = 260; const beeMove = new Float32Array(MAXB * 4); beeGeo.setAttribute('aMove', new THREE.InstancedBufferAttribute(beeMove, 4));
+const MAXB = 300; const beeMove = new Float32Array(MAXB * 4); beeGeo.setAttribute('aMove', new THREE.InstancedBufferAttribute(beeMove, 4));
 const beePol = new Float32Array(MAXB); beeGeo.setAttribute('aPol', new THREE.InstancedBufferAttribute(beePol, 1));
 const beeMat = mat(`varying float vPol; void main(){ vec3 n=normalize(vN); vec3 V=normalize(uCam-vW);
   float fz=hash21(floor(vL.xy*90.0)+floor(vL.z*90.0)); float isF=smoothstep(0.2,0.5,vC.g/(vC.r+0.001)-0.3)*step(0.2,vC.r);
@@ -670,7 +680,7 @@ let grassMesh;
   // thick walls of taller grass hugging the dew run, so the track reads as a tight little path
   for (let k = 0; k < NB * 3 && n < NB; k++) { const p = DEWPATH.S[(Math.random() * DEWPATH.S.length) | 0], a = rnd(TAU), r = rnd(2.5, 8), x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, h = terrainH(x, z);
     if (h < WY + 0.6 || dewPathD(x, z) < 2.5) continue; off[n * 3] = x; off[n * 3 + 1] = h - 0.2; off[n * 3 + 2] = z; par[n * 4] = rnd(8, 14); par[n * 4 + 1] = rnd(TAU); par[n * 4 + 2] = rnd(TAU); par[n * 4 + 3] = rnd(0.7, 1.15); n++; }
-  while (n < N + NB && guard++ < N * 4) { const a = rnd(TAU), d = Math.sqrt(Math.random()) * 330 + 14, x = Math.cos(a) * d, z = Math.sin(a) * d, h = terrainH(x, z); if (h < WY + 0.6 || dewPathD(x, z) < 2.4) continue;
+  while (n < N + NB && guard++ < N * 4) { const a = rnd(TAU), d = Math.sqrt(Math.random()) * 330 + 14, x = Math.cos(a) * d, z = Math.sin(a) * d, h = terrainH(x, z); if (h < WY + 0.6 || dewPathD(x, z) < 2.4 || brookD(x, z) < BROOK.hw + 0.6 || Math.abs(Math.hypot(x - HOLLOW.x, z - HOLLOW.z) - HOLLOW.r) < 1.6 || hollowRootD(x, z) < 3.4) continue;
     off[n * 3] = x; off[n * 3 + 1] = h - 0.2; off[n * 3 + 2] = z; par[n * 4] = rnd(4, 11) * (h < WY + 3 ? 1.5 : 1); par[n * 4 + 1] = rnd(TAU); par[n * 4 + 2] = rnd(TAU); par[n * 4 + 3] = rnd(0.7, 1.25); n++; }
   const g = new THREE.InstancedBufferGeometry(); g.instanceCount = n;
   g.setAttribute('position', new THREE.Float32BufferAttribute([-.5, 0, 0, .5, 0, 0, -.5, .5, 0, .5, .5, 0, 0, 1, 0], 3)); g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
@@ -730,6 +740,11 @@ const PAL = [
       const gy = terrainH(x, z); if (fox) nf++; else nv++;
       flowers.push({ x, z, y: gy + (fox ? fr(14, 19) : fr(2.5, 4.5)), r: fox ? 1.2 : 0.9, T: fox ? FOX : VIOLET, np: fox ? 9 : 5, len: fox ? 2.0 : 1.5, cool: 0, tilt: fox ? 0.5 : 0.25, ax: fr(-0.1, 0.1), az: fr(-0.1, 0.1), val: fox ? 3 : 2, zone: 'forest', fox }); }
   }
+  // batch 2: clear flowers out of the brook and the bramble wall; moonbells (worth 3) grow hidden in the hollow
+  for (let i = flowers.length - 1; i >= 0; i--) { const f = flowers[i]; if (f.lily) continue; if (brookD(f.x, f.z) < BROOK.hw + 2.5 || Math.hypot(f.x - HOLLOW.x, f.z - HOLLOW.z) < HOLLOW.r + 3) flowers.splice(i, 1); }
+  { const MOON = { p: [0.62, 0.78, 1.15], c: [1.15, 0.95, 0.45] };
+    for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + 0.4, d = k === 0 ? 0 : 7.5, x = HOLLOW.x + Math.cos(a) * d, z = HOLLOW.z + Math.sin(a) * d;
+      flowers.push({ x, z, y: terrainH(x, z) + (k === 0 ? 5.5 : 3.6), r: 1.0, T: MOON, np: 10, len: 1.8, cool: 0, tilt: 0.3, ax: 0, az: 0, val: 3, glade: true }); } }
   const pg = new THREE.PlaneGeometry(1, 1, 10, 6); pg.rotateX(-Math.PI / 2); pg.translate(0.5, 0, 0);
   { const p = pg.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); const prof = Math.sin(Math.PI * Math.pow(x, 0.62)) * 0.9 + 0.12; p.setZ(i, z * prof); p.setY(i, 0.22 * x * x - 0.5 * z * z * prof + Math.sin(x * 9) * 0.01 + 0.16 * Math.pow(x, 6) - 0.05 * Math.abs(z) * x); } pg.computeVertexNormals(); }
   const totalP = flowers.reduce((s, f) => s + f.np, 0);
@@ -1246,7 +1261,7 @@ function collide(p, v) {
   { const dx = p.x - ORCH.x, dz = p.z - ORCH.z, dO = Math.hypot(dx, dz);
     if (!G.orchard) { const lim = HEDGE_R + 6; if (dO < lim) { const k = lim / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; const vr = (v.x * dx + v.z * dz) / dO; if (vr < 0) { v.x -= vr * dx / dO * 1.6; v.z -= vr * dz / dO * 1.6; } windHint(); } }
     else if (Math.abs(dO - HEDGE_R) < 8.5 + PR && p.y < terrainH(p.x, p.z) + 37 && !inHedgeGap(Math.atan2(dz, dx)) && !(Math.abs(Math.atan2(Math.sin(Math.atan2(dz, dx) - HEDGE_TUN), Math.cos(Math.atan2(dz, dx) - HEDGE_TUN))) < 0.06 && p.y < terrainH(p.x, p.z) + 5.5)) { const t = HEDGE_R + (dO > HEDGE_R ? 1 : -1) * (8.5 + PR), k = t / dO; p.x = ORCH.x + dx * k; p.z = ORCH.z + dz * k; } }
-  zoneWalls(p, v); forestCollide(p, v); nestCollide(p, v);
+  zoneWalls(p, v); forestCollide(p, v); nestCollide(p, v); hollowCollide(p, v); branchCollide(p, v);
   for (const t of orchTrees) { const dx = p.x - t.x, dz = p.z - t.z, dh = Math.hypot(dx, dz); if (dh > t.cr * 1.6 + 3) continue;
     if (p.y < t.top - t.cr * 0.3 && dh < t.R + PR + 0.8) { const k = (t.R + PR + 0.8) / Math.max(dh, 0.01); p.x = t.x + dx * k; p.z = t.z + dz * k; }
     if (t.blobs) for (const b of t.blobs) { const bx = p.x - b[0], by = (p.y - b[1]) * b[3] / b[4], bz = p.z - b[2], dd = Math.hypot(bx, by, bz), rr = b[3] * 1.02 + PR; if (dd < rr) { const k = rr / Math.max(dd, 0.01); p.x = b[0] + bx * k; p.y = b[1] + by * k * b[4] / b[3]; p.z = b[2] + bz * k; v.multiplyScalar(0.7); } } }
@@ -1480,6 +1495,9 @@ function updateWasps(dt) {
     if (w.gone > 0) { w.gone -= dt; if (w.gone > 0) { hideWasp(i, w); return; } w.p.copy(w.home); w.p.y += 12; w.v.set(0, 0, 0); w.state = 'patrol'; w.t = 0; }
     if (w.state === 'webbed') { w.webT -= dt; w.p.copy(w.webAt).addScaledVector(w.web.n, Math.sin(time * 40) * 0.08); w.p.x += Math.sin(time * 31) * 0.05;
       if (w.webT <= 0) { eatWasp(w, 'web'); hideWasp(i, w); return; } target = w.p; spd = 0; }
+    if (w.state === 'dazed') { w.dazeT -= dt; const gy = terrainH(w.p.x, w.p.z) + 0.5; w.p.y = Math.max(gy, w.p.y - dt * 14); if (w.p.y <= gy + 0.01) { w.p.x += Math.sin(time * 37 + i) * 0.01; }
+      if (w.dazeT <= 0) { if (w.mob) { w.state = 'flee'; w.t = 0; w.away = w.p.clone().add(new V3(rnd(-80, 80), 30, rnd(-80, 80))); } else { w.state = 'retreat'; w.t = 0; } } else { target = w.p; spd = 0; } }
+    if (w.state === 'balled') { target = w.p; spd = 0; }
     if (w.raider || w.mob) { const rr = w.mob ? mobUpdate(w, d, flying, dt) : raiderUpdate(w, d, flying, dt);
       if (rr === null) { w.p.set(0, -500, 0); _v2.set(0.001, 0.001, 0.001); _wm2.compose(w.p, w.q, _v2); waspMesh.setMatrixAt(i, _wm2); waspWings.setMatrixAt(i * 2, _wm2); waspWings.setMatrixAt(i * 2 + 1, _wm2); return; }
       if (rr) { target = rr[0]; spd = rr[1]; } }
@@ -1933,7 +1951,7 @@ function updateHome(dt) {
   const tg = P.mode === 'fly' && !inHive ? (P.pollen > 0 ? 1 : 0.4) * smooth(45, 100, L) : 0; U.uHomeK.value += (tg - U.uHomeK.value) * Math.min(1, dt * 0.8);
   if (!G.seenHome && P.pollen >= G.cap && L > 120) { G.seenHome = true; hint('bees read the light in the sky: a faint shimmer stands over home', 6); }
 }
-function updateRound6(dt) { updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
+function updateRound6(dt) { updateBatch2(dt); updateHeat(dt); updateSwarm(dt); updateHome(dt); updateDay(dt); updateZones(dt); updateDragonflies(dt); updateNest(dt); updateTrails(dt); }
 applyDayLight();
 G.orchard = !!G.zones.garden;
 function beeCollide() {
@@ -2104,7 +2122,7 @@ function eatWasp(w, by) {
   if (w.raider) { w.state = 'idle'; w.away = null; } else { w.state = 'gone'; w.gone = rnd(45, 60); }
   w.webbed = 0; w.decoy = null; G.revenge++;
   if (near) { gainHoney(2); noiseHit(by === 'web' ? 2200 : 900, 2, 0.18, 0.3); [7, 4, 2].forEach((n, k) => tone(SCALE[n] * 0.5, 0.06, 0.8, 'triangle', k * 0.08));
-    toast(by === 'web' ? '<b>The spider got it!</b><br><span>one less wasp. +2 honey</span>' : '<b>Snatched!</b><br><span>a dragonfly ate the wasp. +2 honey</span>', 3); }
+    toast(by === 'web' ? '<b>The spider got it!</b><br><span>one less wasp. +2 honey</span>' : by === 'ball' ? '<b>The wasp is done for</b><br><span>your sisters cooked it. +2 honey</span>' : '<b>Snatched!</b><br><span>a dragonfly ate the wasp. +2 honey</span>', 3); }
 }
 function waspWebCheck(w, prev) {
   if (w.state !== 'chase' || w.decoy) return;
@@ -2256,4 +2274,205 @@ function updateTrails(dt) {
   trGeo.attributes.aA.needsUpdate = trGeo.attributes.position.needsUpdate = true;
 }
 
-window.__g = { archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
+// ---------- batch 2a: red clover heat buzz, and the bee ball ----------
+// red clovers: rare, low in the grass. A sip warms your flight muscles; F releases the heat as a shimmering pulse
+const CLOVERS = [];
+{ const headM = mat(`void main(){ vec3 n=NORMAL; float fl=vnoise(vL.xz*14.0+vL.y*9.0); vec3 alb=mix(vec3(0.55,0.05,0.16),vec3(0.95,0.35,0.55),fl)*(0.7+0.4*smoothstep(-0.5,0.8,vL.y));
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.2,0.8),vW),1.0); }`), stemM = simple('0.18,0.36,0.08', 0.2, 0.6);
+  const hg = new THREE.IcosahedronGeometry(0.85, 3); { const p = hg.attributes.position; for (let i = 0; i < p.count; i++) { const v = new V3(p.getX(i), p.getY(i), p.getZ(i)); const k = 1 + 0.18 * Math.abs(Math.sin(v.x * 23) * Math.sin(v.y * 19) * Math.sin(v.z * 21)); v.multiplyScalar(k); v.y *= 1.15; p.setXYZ(i, v.x, v.y, v.z); } hg.computeVertexNormals(); }
+  let guard = 0; while (CLOVERS.length < 7 && guard++ < 4000) { const a = rnd(TAU), d = rnd(70, 230), x = Math.cos(a) * d, z = Math.sin(a) * d, gy = terrainH(x, z);
+    if (overWater(x, z) || zoneBlocked(x, z) || gy < WY + 0.5 || dewPathD(x, z) < 6 || brookD(x, z) < 14 || Math.hypot(x - HOLLOW.x, z - HOLLOW.z) < HOLLOW.r + 12 || Math.hypot(x - ORCH.x, z - ORCH.z) < HEDGE_R + 12 || CLOVERS.some(c => Math.hypot(c.x - x, c.z - z) < 40)) continue;
+    const h = rnd(2.4, 3.6), g = new THREE.Group(); g.position.set(x, gy, z);
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, h, 6), stemM); st.position.y = h / 2; g.add(st);
+    const hd = new THREE.Mesh(hg, headM); hd.position.y = h + 0.6; g.add(hd);
+    for (const s of [-1, 1]) { const lf = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), stemM); lf.scale.set(1, 0.12, 0.6); lf.position.set(s * 0.45, h * 0.45, 0); lf.rotation.y = s * 0.4; g.add(lf); }
+    scene.add(g); CLOVERS.push({ x, z, y: gy + h + 0.6, g, hd, cool: 0, sip: 0 }); } }
+G.heat = 0; G.heatCD = 0; G.seenClover = false;
+const heatM = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { uA: { value: 0 }, uTime: U.uTime, uCam: U.uCam },
+  vertexShader: `varying vec3 vN; varying vec3 vW; void main(){ vN=normalize(mat3(modelMatrix)*normal); vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader: UNTONE + `uniform float uA; uniform float uTime; uniform vec3 uCam; varying vec3 vN; varying vec3 vW; void main(){ vec3 V=normalize(uCam-vW); float fr=pow(1.0-abs(dot(normalize(vN),V)),2.5);
+    float rip=0.6+0.4*sin(vW.y*6.0+uTime*20.0+vW.x*3.0); gl_FragColor=vec4(untone(vec3(1.0,0.55,0.2))*fr*rip*uA*2.6,1.0); }` });
+const heatBall = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), heatM); heatBall.visible = false; scene.add(heatBall);
+const HEAT = { t: -1 };
+function heatBuzz() {
+  if (!(G.heat > 0) || P.mode !== 'fly' || inHive) { if (P.mode === 'fly' && time > (G.heatHintT || 0)) { G.heatHintT = time + 4; hint('your wings are cool. Sip a <b>red clover</b> to warm them', 3); } return; }
+  G.heat = 0; HEAT.t = 0; heatBall.visible = true; heatBall.position.copy(P.pos);
+  sweep(90, 340, 0.7, 0.09, 'sawtooth'); noiseHit(300, 0.8, 0.3, 0.6, 'lowpass', 900); puff(P.pos, 20, [1.0, 0.6, 0.25], 6, 0.012, 0.8);
+  for (let k = 0; k < 60; k++) { const q = parts[pNext], a = k / 60 * TAU; puff(P.pos, 1, [1.0, 0.5, 0.18], 0, 0.016, 0.7); q.g = 0; q.v.set(Math.cos(a) * 24, rnd(-3, 3), Math.sin(a) * 24); }
+  let n = 0; for (const w of wasps) { if (w.gone > 0 || w.p.y < -100 || w.state === 'idle' || w.state === 'dazed' || w.state === 'balled') continue; if (w.p.distanceTo(P.pos) < 15) { dazeWasp(w); n++; } }
+  toast(n ? `<b>Heat buzz!</b><br><span>${n} wasp${n > 1 ? 's' : ''} knocked out of the air</span>` : '<b>Heat buzz!</b><br><span>no wasps close enough</span>', 2.5);
+}
+function dazeWasp(w) { w.state = 'dazed'; w.dazeT = rnd(5, 7); w.decoy = null; w.v.set(0, 0, 0); w.wasMob = !!w.mob; }
+function updateHeat(dt) {
+  if (HEAT.t >= 0) { HEAT.t += dt; const k = HEAT.t / 0.6; heatBall.position.copy(P.pos); heatBall.scale.setScalar(1 + 14 * Math.min(1, k)); heatM.uniforms.uA.value = Math.max(0, 1 - k) * 0.9; if (k >= 1) { HEAT.t = -1; heatBall.visible = false; } }
+  if (G.heat > 0 && Math.random() < dt * 6 && P.mode === 'fly') { _v.copy(P.pos).addScaledVector(fwd, -0.6); puff(_v, 1, [1.0, 0.5, 0.2], 0.6, 0.006, 0.5, -0.5); }
+  for (const c of CLOVERS) {
+    c.cool -= dt; c.hd.visible = c.cool <= 0; const vis = Math.hypot(camera.position.x - c.x, camera.position.z - c.z) < 300; c.g.visible = vis; if (c.cool > 0) continue;
+    c.hd.rotation.y += dt * 0.2; c.g.rotation.z = Math.sin(time * 1.3 + c.x) * 0.05 * (0.4 + WIND.s);
+    _v.set(c.x, c.y, c.z); const d = P.pos.distanceTo(_v);
+    if (P.mode === 'fly' && d < 1.9) { c.sip += dt; if (Math.random() < dt * 10) tone(SCALE[Math.min(7, Math.floor(c.sip * 6))] * 0.5, 0.05, 0.5);
+      if (c.sip > 1.0) { c.sip = 0; c.cool = 90; G.heat = 1; puff(_v, 20, [1.0, 0.3, 0.45], 2, 0.012, 1.2); sweep(120, 260, 0.5, 0.05, 'triangle');
+        toast(G.seenClover ? '<b>Warm clover nectar</b><br><span><kbd>F</kbd> heat buzz</span>' : '<b>Warm red clover nectar!</b><br><span>your flight muscles burn hot. Press <kbd>F</kbd> near wasps to blast them with heat</span>', G.seenClover ? 2.5 : 6); G.seenClover = true; } }
+    else c.sip = Math.max(0, c.sip - dt);
+    if (P.pos.distanceTo(_v) > 60 && !G.seenClover && Math.random() < dt * 0.5) { } // left quiet: clovers are found, not announced
+  }
+}
+// the bee ball: call your sisters (R). They swarm the nearest wasp into a glowing, buzzing knot and it drops
+const SWARM = { active: false, t: 0, cd: 0, w: null, c: new V3(), bees: [], phase: '' };
+for (let i = 0; i < 12; i++) { const b = makeFlier(rnd(0.9, 1.05)); b.s.set(0.001, 0.001, 0.001); b.home = new V3(); b.o = new V3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).normalize(); b.update = (dt) => { if (!SWARM.active) { b.s.set(0.001, 0.001, 0.001); b.fly = false; b.pol = 0; return; } b.fly = true; b.s.setScalar(b.sc || 1); swarmBee(b, dt); b.face(dt); }; b.sc = rnd(0.9, 1.05); SWARM.bees.push(b); }
+const radTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const x = cv.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })();
+const ballGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: radTex, color: new THREE.Color(2.2, 1.1, 0.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+ballGlow.center.set(0.5, 0.5); ballGlow.scale.set(4, 4, 1); ballGlow.visible = false; scene.add(ballGlow);
+function callSisters() {
+  if (P.mode !== 'fly' || inHive) return;
+  if (SWARM.active) return; if (SWARM.cd > 0) { hint(`your sisters are still catching their breath (${Math.ceil(SWARM.cd)}s)`, 2); return; }
+  if (G.workers < 3) { hint('you need at least 3 sisters to call for help', 3); return; }
+  let best = null, bd = 40; for (const w of wasps) { if (w.gone > 0 || w.p.y < -100 || w.state === 'idle' || w.state === 'balled') continue; const d = w.p.distanceTo(P.pos); if (d < bd) { bd = d; best = w; } }
+  [0, 4, 7, 4].forEach((n, k) => tone(SCALE[n] * 0.5, 0.06, 0.5, 'sawtooth', k * 0.12)); sweep(220, 320, 0.6, 0.04, 'sawtooth');
+  if (!best) { toast('<b>You buzz for help</b><br><span>but there\'s no wasp close enough</span>', 2.5); SWARM.cd = 4; return; }
+  SWARM.active = true; SWARM.t = 0; SWARM.w = best; SWARM.phase = 'go'; SWARM.cd = 35;
+  SWARM.bees.forEach((b, i) => { b.p.copy(P.pos).add(new V3(rnd(-8, 8), rnd(-3, 5), rnd(-8, 8))).addScaledVector(fwd, -10); b.first = true; b.prev.copy(b.p); b.spd = rnd(24, 32); });
+  toast('<b>Sisters, to me!</b><br><span>your sisters swarm in on the wasp</span>', 2.5);
+}
+function swarmBee(b, dt) {
+  const w = SWARM.w; let tgt;
+  if (SWARM.phase === 'go') tgt = w.p; else if (SWARM.phase === 'ball') tgt = _v.copy(SWARM.c).addScaledVector(b.o, 0.75 + 0.15 * Math.sin(time * 20 + b.ph)); else tgt = b.home;
+  const sp = SWARM.phase === 'ball' ? 40 : b.spd; _v2.copy(tgt).sub(b.p); const L = _v2.length();
+  if (SWARM.phase === 'ball') b.p.lerp(tgt, Math.min(1, dt * 12)); else if (L > 0.01) b.p.addScaledVector(_v2, Math.min(1, sp * dt / L));
+  b.p.x += Math.sin(time * 9 + b.ph) * 0.04; b.p.y += Math.cos(time * 11 + b.ph) * 0.04;
+}
+function updateSwarm(dt) {
+  SWARM.cd -= dt; if (!G.seenRally && G.workers >= 3 && P.mode === 'fly' && wasps.some(w => w.state === 'chase')) { G.seenRally = true; hint('<kbd>R</kbd> buzz for your sisters: they ball up on wasps', 6); }
+  if (!SWARM.active) { ballGlow.visible = false; return; }
+  SWARM.t += dt; const w = SWARM.w;
+  if (SWARM.phase === 'go') {
+    const arrived = SWARM.bees.filter(b => b.p.distanceTo(w.p) < 2.5).length;
+    if (w.gone > 0 || w.p.y < -100 || SWARM.t > 6) { SWARM.phase = 'home'; SWARM.t = 0; }
+    else if (arrived >= 6) { SWARM.phase = 'ball'; SWARM.t = 0; w.state = 'balled'; w.v.set(0, 0, 0); SWARM.c.copy(w.p); noiseHit(400, 0.7, 0.25, 0.5, 'lowpass', 160); sweep(180, 120, 1.5, 0.06, 'sawtooth');
+      toast('<b>Bee ball!</b><br><span>your sisters cook the wasp with their heat</span>', 3); }
+  } else if (SWARM.phase === 'ball') {
+    const gy = terrainH(SWARM.c.x, SWARM.c.z) + 0.9; SWARM.c.y = Math.max(gy, SWARM.c.y - dt * (SWARM.t > 1.2 ? 6 : 0.5)); w.p.copy(SWARM.c);
+    ballGlow.visible = true; ballGlow.position.copy(SWARM.c); ballGlow.material.opacity = Math.min(1, SWARM.t) * (0.55 + 0.25 * Math.sin(time * 14)); ballGlow.scale.setScalar(3.5 + 0.3 * Math.sin(time * 9));
+    if (Math.random() < dt * 20 && P.pos.distanceTo(SWARM.c) < 60) noiseHit(rnd(180, 320), 2, 0.05, 0.08, 'lowpass', 400);
+    if (SWARM.t > 4.0) { eatWasp(w, 'ball'); SWARM.phase = 'home'; SWARM.t = 0; SWARM.bees.forEach(b => { const a = rnd(TAU); b.home.copy(SWARM.c).add(new V3(Math.cos(a) * 60, 30, Math.sin(a) * 60)); }); }
+  } else { ballGlow.visible = false; if (SWARM.t < dt * 1.5) SWARM.bees.forEach(b => { const a = rnd(TAU); b.home.copy(b.p).add(new V3(Math.cos(a) * 60, 30, Math.sin(a) * 60)); }); if (SWARM.t > 3) { SWARM.active = false; } }
+}
+addEventListener('keydown', e => { if (e.repeat) return; if (e.code === 'KeyF') heatBuzz(); if (e.code === 'KeyR') callSisters(); });
+
+// ---------- batch 2b: the misty brook, swaying branches, the bramble hollow, petal gusts, and a calm after revenge ----------
+// the brook: cool air over running water lifts a bee skimming low; branches lean low over it and sway in the wind
+const brookCurve = new THREE.CatmullRomCurve3(BROOK.pts.map(p => new V3(p[0], 0, p[1])), false, 'centripetal');
+const BROOKS = brookCurve.getSpacedPoints(90).map(p => { p.y = terrainBase(p.x, p.z) - BROOK.depth + 1.4; return p; });
+for (let i = 1; i < BROOKS.length; i++) BROOKS[i].y = Math.min(BROOKS[i].y, BROOKS[i - 1].y + 0.05); // water runs downhill (or level)
+function brookWY(s) { const k = clamp(s / (BROOK.pts.length - 1), 0, 1) * (BROOKS.length - 1), i = Math.floor(k), f = k - i; return lerp(BROOKS[i].y, BROOKS[Math.min(BROOKS.length - 1, i + 1)].y, f); }
+{ const pos = [], uv = [], idx = [], S = BROOKS;
+  S.forEach((p, i) => { const a = S[Math.max(0, i - 1)], b = S[Math.min(S.length - 1, i + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const L = Math.hypot(tx, tz) || 1; tx /= L; tz /= L;
+    const w = BROOK.hw + 1.2; for (const s of [-1, 1]) { pos.push(p.x - tz * s * w, p.y, p.z + tx * s * w); uv.push(s < 0 ? 0 : 1, i * 0.6); } if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); } });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = mat(`void main(){ vec3 V=normalize(uCam-vW); vec2 fl=vec2(vUv.x*3.0, vUv.y*2.0-uTime*1.6);
+    float rip=fbm(fl*2.0)*0.6+fbm(fl*5.0+3.0)*0.4; vec3 n=normalize(vec3((rip-0.5)*0.5,1.0,(fbm(fl*3.0+7.0)-0.5)*0.5));
+    float fr=pow(1.0-max(dot(n,V),0.0),3.0)*0.85+0.08; vec3 R=reflect(-V,n);
+    vec3 c=mix(vec3(0.025,0.07,0.06), hazeCol(R)*0.7, fr*0.8)+vec3(5.0,3.6,2.2)*pow(max(dot(R,uSun),0.0),120.0);
+    c+=vec3(0.8)*smoothstep(0.62,0.8,rip)*0.12; float edge=min(vUv.x,1.0-vUv.x); c=mix(vec3(0.16,0.13,0.08),c,smoothstep(0.0,0.12,edge));
+    gl_FragColor=vec4(finish(c,vW),1.0); }`);
+  scene.add(new THREE.Mesh(g, m)); }
+const BRANCHES = [];
+{ const barkM = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vec2(atan(vL.z,vL.x)*3.0,vL.y*1.5)); vec3 alb=mix(vec3(0.10,0.07,0.04),vec3(0.32,0.24,0.15),a); alb=mix(alb,vec3(0.15,0.28,0.06),smoothstep(0.55,0.7,fbm(vL.xy*2.0+4.0))*0.6);
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.05,0.0),vW),1.0); }`), leafM = mat(`void main(){ vec3 n=NORMAL; float a=vnoise(vW.xz*3.0+vW.y*2.0); vec3 alb=mix(vec3(0.05,0.16,0.03),vec3(0.28,0.46,0.10),a)*(0.75+0.4*vnoise(vW.xz*11.0+vW.y*9.0));
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.1,0.9),vW),1.0); }`);
+  for (const k of [10, 24, 38, 50, 63, 76]) { const p = BROOKS[k], q = BROOKS[k + 1]; let tx = q.x - p.x, tz = q.z - p.z; const L = Math.hypot(tx, tz) || 1; tx /= L; tz /= L;
+    const side = k % 2 ? 1 : -1, base = new V3(p.x - tz * side * (BROOK.hw + 5), 0, p.z + tx * side * (BROOK.hw + 5)); base.y = terrainH(base.x, base.z) + 2.5;
+    const tip = new V3(p.x + tz * side * (BROOK.hw + 2), p.y + 3.4 + (k % 3) * 0.6, p.z - tx * side * (BROOK.hw + 2));
+    const len = base.distanceTo(tip), g = new THREE.Group(); g.position.copy(base);
+    const cyl = new THREE.CylinderGeometry(0.22, 0.45, len, 7); cyl.translate(0, len / 2, 0); const br = new THREE.Mesh(cyl, barkM); g.add(br);
+    for (let j = 0; j < 7; j++) { const lg = new THREE.IcosahedronGeometry(1, 3); { const pp = lg.attributes.position; for (let i2 = 0; i2 < pp.count; i2++) { const vx = pp.getX(i2), vy = pp.getY(i2), vz = pp.getZ(i2), kk = 1 + 0.35 * Math.sin(vx * 5 + j) * Math.sin(vz * 4.3 + vy * 3); pp.setXYZ(i2, vx * kk, vy * kk, vz * kk); } lg.computeVertexNormals(); }
+      const lf = new THREE.Mesh(lg, leafM); const t = 0.5 + j * 0.075; lf.position.set(rnd(-1.4, 1.4), len * t, rnd(-1.4, 1.4)); lf.scale.set(rnd(1.0, 1.7), rnd(0.4, 0.6), rnd(1.0, 1.7)); lf.rotation.set(rnd(-0.4, 0.4), rnd(TAU), rnd(-0.4, 0.4)); br.add(lf); }
+    const dir = tip.clone().sub(base).normalize(); g.quaternion.setFromUnitVectors(YA, dir); scene.add(g);
+    BRANCHES.push({ g, base, dir, len, q0: g.quaternion.clone(), ph: rnd(TAU), a: new V3(), b: new V3() }); } }
+const _bq = new Q4(), _bax = new V3();
+function updateBranches(dt) { for (const B of BRANCHES) { const sw = Math.sin(time * 1.1 + B.ph) * (0.05 + 0.13 * WIND.s) + Math.sin(time * 2.7 + B.ph * 2) * 0.03;
+    _bax.set(-B.dir.z, 0, B.dir.x).normalize(); _bq.setFromAxisAngle(_bax, sw); B.g.quaternion.copy(B.q0).premultiply(_bq);
+    B.a.copy(B.base); B.b.set(0, B.len, 0).applyQuaternion(B.g.quaternion).add(B.base); } }
+const _brPrev = new V3(); let _brHas = false;
+function branchCollide(p, v) { if (!_brHas || _brPrev.distanceTo(p) > 6) _brPrev.copy(p); _brHas = true;
+  for (const B of BRANCHES) { if (Math.abs(p.x - B.base.x) > B.len + 4 || Math.abs(p.z - B.base.z) > B.len + 4) continue; const r = 0.42 + PR;
+    if (segSeg(_brPrev, p, B.a, B.b) < r) { _aN.subVectors(_aC1, _aC2); const L = _aN.length() || 1; _aN.multiplyScalar(1 / L); p.copy(_aC2).addScaledVector(_aN, r + 0.01); const vn = v.dot(_aN); if (vn < 0) v.addScaledVector(_aN, -vn * 1.2); } }
+  _brPrev.copy(p); }
+// the bramble hollow: a thorny ring roofed with leaves. The only way in is through a hollow root
+const HOL = (() => { const gy = terrainH(HOLLOW.x, HOLLOW.z), sc = new V3(HOLLOW.x, gy - 8, HOLLOW.z), Rs = Math.hypot(HOLLOW.r, HOLLOW.wallH + 8);
+  const a0 = HOLLOW.a0; // the root comes in from the side facing home, a little round
+  const pts = [26, 21, 17.5, 15, 11].map((r, i) => { const a = a0 + (i - 2) * 0.05, x = HOLLOW.x + Math.cos(a) * r, z = HOLLOW.z + Math.sin(a) * r; return new V3(x, Math.max(gy, terrainH(x, z)) + 2.3 + (i === 0 ? 0.4 : 0), z); });
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal'); return { gy, sc, Rs, curve, S: curve.getSpacedPoints(40), tr: 2.1, hole: curve.getPointAt(0.42) }; })();
+{ const brM = mat(`uniform vec3 uHole; void main(){ if(distance(vW,uHole)<2.45) discard; vec3 n=NORMAL; float a=fbm(vW.xz*0.9+vW.y*0.7), b=vnoise(vW.xz*5.0+vW.y*4.0); float cane=1.0-abs(2.0*vnoise(vec2(vW.x*1.7+vW.z*1.3, vW.y*0.8+vW.x*0.5-vW.z*0.6)*2.2)-1.0); cane=pow(cane,3.0)*0.6+0.25*vnoise(vW.xz*3.0+vW.y*2.0);
+      vec3 alb=mix(vec3(0.03,0.05,0.02),mix(vec3(0.16,0.24,0.05),vec3(0.30,0.20,0.10),b),cane)*(0.55+0.7*a); alb=mix(alb,vec3(0.30,0.12,0.12),smoothstep(0.7,0.9,b)*0.5); // thorny canes, a few red berries
+      alb=mix(alb,vec3(0.45,0.05,0.12),smoothstep(0.93,0.97,vnoise(vW.xz*9.0+vW.y*7.0)));
+      gl_FragColor=vec4(finish(shade(alb,n,vW,0.08,0.7),vW),1.0); }`, { uniforms: { uHole: { value: HOL.hole } }, side: THREE.DoubleSide });
+  const bulge = (g, amt) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 1 + amt * (Math.sin(x * 1.3 + y * 0.7) * Math.cos(z * 1.1 - y) * 0.6 + Math.sin(x * 3.1 + z * 2.3) * 0.4); p.setXYZ(i, x * k, y, z * k); } g.computeVertexNormals(); return g; };
+  for (const r of [HOLLOW.r - 1.2, HOLLOW.r + 1.2]) { const g = bulge(new THREE.CylinderGeometry(r, r, HOLLOW.wallH + 3, 64, 6, true), 0.06); g.translate(HOLLOW.x, HOL.gy + (HOLLOW.wallH + 3) / 2 - 3, HOLLOW.z); scene.add(new THREE.Mesh(g, brM)); }
+  const dome = new THREE.SphereGeometry(HOL.Rs, 48, 16, 0, TAU, 0, Math.asin(HOLLOW.r / HOL.Rs) + 0.04); bulge(dome, 0.05); dome.translate(HOL.sc.x, HOL.sc.y, HOL.sc.z); scene.add(new THREE.Mesh(dome, brM));
+  const rootM = mat(`void main(){ vec3 n=NORMAL; float a=fbm(vec2(atan(vL.z,vL.x)*4.0,vL.y*0.4)); vec3 alb=mix(vec3(0.09,0.06,0.035),vec3(0.36,0.26,0.16),smoothstep(0.3,0.7,a));
+      alb=mix(alb,vec3(0.14,0.30,0.05),smoothstep(0.5,0.7,fbm(vL.xy*0.3+2.0))*smoothstep(0.0,0.7,n.y)*0.7); gl_FragColor=vec4(finish(shade(alb,n,vW,0.06,0.2),vW),1.0); }`, { side: THREE.DoubleSide });
+  scene.add(new THREE.Mesh(new THREE.TubeGeometry(HOL.curve, 60, HOL.tr + 0.35, 14), rootM));
+}
+let _hPrev = new V3(), _hHas = false;
+function hollowCollide(p, v) {
+  const dx = p.x - HOLLOW.x, dz = p.z - HOLLOW.z, d = Math.hypot(dx, dz); if (d > HOLLOW.r + 14) { _hHas = false; return; }
+  if (!_hHas) _hPrev.copy(p); _hHas = true;
+  // inside the root?
+  let best = 1e9, bi = 0; for (let i = 0; i < HOL.S.length; i++) { const q = HOL.S[i], e = (q.x - p.x) ** 2 + (q.y - p.y) ** 2 + (q.z - p.z) ** 2; if (e < best) { best = e; bi = i; } }
+  const ra = Math.sqrt(best), q = HOL.S[bi], inRoot = ra < HOL.tr + 0.2 && bi > 0 && bi < HOL.S.length - 1;
+  if (inRoot) { if (ra > HOL.tr - PR) { const k = (HOL.tr - PR) / Math.max(ra, 0.01); p.set(q.x + (p.x - q.x) * k, q.y + (p.y - q.y) * k, q.z + (p.z - q.z) * k); } }
+  else if (ra < HOL.tr + 0.35 + PR && bi > 0 && bi < HOL.S.length - 1) { const k = (HOL.tr + 0.35 + PR) / Math.max(ra, 0.01); p.set(q.x + (p.x - q.x) * k, q.y + (p.y - q.y) * k, q.z + (p.z - q.z) * k); }
+  const d2 = Math.hypot(p.x - HOLLOW.x, p.z - HOLLOW.z);
+  // the bramble wall
+  if (!inRoot && Math.abs(d2 - HOLLOW.r) < 1.2 + PR + 0.3 && p.y < HOL.gy + HOLLOW.wallH + 1) { const pd = Math.hypot(_hPrev.x - HOLLOW.x, _hPrev.z - HOLLOW.z), t = pd < HOLLOW.r ? HOLLOW.r - 1.5 - PR : HOLLOW.r + 1.5 + PR, k = t / Math.max(d2, 0.01);
+    p.x = HOLLOW.x + (p.x - HOLLOW.x) * k; p.z = HOLLOW.z + (p.z - HOLLOW.z) * k; const nx = (p.x - HOLLOW.x) / t, nz = (p.z - HOLLOW.z) / t, vn = (v.x * nx + v.z * nz) * (pd < HOLLOW.r ? -1 : 1); if (vn < 0) { v.x *= 0.3; v.z *= 0.3; } }
+  // the leafy roof
+  const ds = p.distanceTo(HOL.sc), dp = _hPrev.distanceTo(HOL.sc);
+  if (d2 < HOLLOW.r + 1 && Math.abs(ds - HOL.Rs) < PR + 0.6) { const t = dp < HOL.Rs ? HOL.Rs - PR - 0.65 : HOL.Rs + PR + 0.65; _v.copy(p).sub(HOL.sc).setLength(t); p.copy(HOL.sc).add(_v); _v.normalize(); const vn = v.dot(_v) * (dp < HOL.Rs ? -1 : 1); if (vn < 0) v.addScaledVector(_v, dp < HOL.Rs ? vn : -vn); }
+  _hPrev.copy(p);
+}
+// petal gusts: now and then a ribbon of petals rides the wind. Fly inside it and it carries you
+const GN = 70, GUSTS = [];
+{ const gm = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uTime: U.uTime },
+    vertexShader: `attribute float aA; attribute vec3 aC; varying float vA; varying vec3 vCc; void main(){ vec4 mv=viewMatrix*vec4(position,1.0); vA=aA; vCc=aC; gl_PointSize=clamp(0.5*500.0/max(-mv.z,0.1),2.0,40.0); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: UNTONE + `varying float vA; varying vec3 vCc; void main(){ vec2 q=gl_PointCoord-0.5; float a=smoothstep(0.5,0.3,length(q*vec2(1.0,1.9))); gl_FragColor=vec4(untone(vCc)*1.2,a*vA); }` });
+  for (let k = 0; k < 2; k++) { const pos = new Float32Array(GN * 3), al = new Float32Array(GN), col = new Float32Array(GN * 3); for (let i = 0; i < GN; i++) { const c = [[1.0, 0.75, 0.85], [1.0, 0.95, 0.95], [0.95, 0.55, 0.7]][i % 3]; col.set(c, i * 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aA', new THREE.BufferAttribute(al, 1)); g.setAttribute('aC', new THREE.BufferAttribute(col, 3));
+    const pts = new THREE.Points(g, gm); pts.frustumCulled = false; pts.visible = false; scene.add(pts);
+    GUSTS.push({ pts, g, pos, al, on: false, t: 0, next: rnd(15, 35) + k * 20, c: new V3(), dir: new V3(), off: Array.from({ length: GN }, () => [rnd(0, 1), rnd(TAU), rnd(0.3, 1)]) }); } }
+G.seenGust = false;
+function updateGusts(dt) {
+  for (const G2 of GUSTS) {
+    if (!G2.on) { G2.next -= dt; if (G2.next <= 0 && P.mode === 'fly' && !inHive && outF > 0.8) { G2.on = true; G2.t = 0; G2.dir.set(WIND.dx, 0, WIND.dz).normalize();
+        G2.c.copy(P.pos).addScaledVector(G2.dir, -rnd(25, 40)).add(new V3(rnd(-12, 12), 0, rnd(-12, 12))); G2.c.y = Math.max(terrainH(G2.c.x, G2.c.z) + rnd(6, 14), P.pos.y + rnd(-3, 3)); G2.pts.visible = true; } continue; }
+    G2.t += dt; const life = 14, fade = Math.min(1, G2.t / 1.5) * Math.min(1, (life - G2.t) / 2); G2.c.addScaledVector(G2.dir, dt * 15); G2.c.y += Math.sin(G2.t * 0.8) * dt * 1.5;
+    const gy = terrainH(G2.c.x, G2.c.z) + 3; if (G2.c.y < gy) G2.c.y = gy;
+    for (let i = 0; i < GN; i++) { const [u, ph, rr] = G2.off[i], s = (u * 22 - 11), sw = Math.sin(G2.t * 2 + u * 9) * 1.5;
+      G2.pos[i * 3] = G2.c.x + G2.dir.x * s - G2.dir.z * (Math.cos(ph + G2.t * 3) * 1.6 * rr + sw); G2.pos[i * 3 + 1] = G2.c.y + Math.sin(ph + G2.t * 3) * 1.6 * rr + Math.sin(u * 7 + G2.t) * 0.6; G2.pos[i * 3 + 2] = G2.c.z + G2.dir.z * s + G2.dir.x * (Math.cos(ph + G2.t * 3) * 1.6 * rr + sw);
+      G2.al[i] = fade * (0.6 + 0.4 * Math.sin(G2.t * 6 + i)); }
+    G2.g.attributes.position.needsUpdate = G2.g.attributes.aA.needsUpdate = true;
+    if (P.mode === 'fly') { _v.copy(P.pos).sub(G2.c); const along = _v.dot(G2.dir); _v.addScaledVector(G2.dir, -along);
+      if (Math.abs(along) < 12 && _v.length() < 3.2) { G.boost = Math.max(G.boost, 1.2); P.vel.addScaledVector(G2.dir, dt * 10); if (Math.random() < dt * 4) tone(SCALE[(Math.random() * 3 | 0) + 4], 0.03, 0.6);
+        if (!G.seenGust) { G.seenGust = true; toast('<b>Caught in a petal gust!</b><br><span>ride the wind with it</span>', 3); } } }
+    if (G2.t > life) { G2.on = false; G2.pts.visible = false; G2.next = rnd(25, 50); }
+  }
+}
+// the brook: skimming low and fast over the water carries you; mist drifts on the surface
+G.seenBrook = false;
+function updateBrook(dt) {
+  const cd = brookD(camera.position.x, camera.position.z);
+  if (cd < 120 && Math.random() < dt * 14) { const i = (Math.random() * BROOKS.length) | 0, p = BROOKS[i]; if (p.distanceTo(camera.position) < 90) { _v.set(p.x + rnd(-3, 3), p.y + 0.4, p.z + rnd(-3, 3)); const q = parts[pNext]; puff(_v, 1, [0.92, 0.95, 1.0], 0, 0.06, 3.5); q.g = -0.15; q.v.set(WIND.dx * 1.5, 0.2, WIND.dz * 1.5); } }
+  if (P.mode !== 'fly' || inHive) return; const bs = brookSeg(P.pos.x, P.pos.z); if (!bs || bs.d > BROOK.hw + 1) return;
+  const wy = brookWY(bs.s), alt = P.pos.y - wy;
+  if (alt < PR + 0.15) { P.pos.y = wy + PR + 0.15; if (P.vel.y < 0) P.vel.y = -P.vel.y * 0.4 + 1.5; P.vel.x *= 0.9; P.vel.z *= 0.9; P.wet = Math.min(1, P.wet + 0.25); _v.set(P.pos.x, wy + 0.1, P.pos.z); puff(_v, 8, [0.85, 0.93, 1], 1.5, 0.01, 0.6, 5, 1); noiseHit(800, 1, 0.08, 0.2, 'lowpass', 200); }
+  else if (alt < 3.0 && Math.hypot(P.vel.x, P.vel.z) > 9) { G.boost = Math.max(G.boost, 1.0); if (Math.random() < dt * 16) { _v.set(P.pos.x + rnd(-0.5, 0.5), wy + 0.05, P.pos.z + rnd(-0.5, 0.5)); puff(_v, 1, [0.85, 0.93, 1], 0.8, 0.01, 0.5, 4, 0.8); }
+    if (!G.seenBrook) { G.seenBrook = true; toast('<b>Cool air over the brook</b><br><span>skim low and fast and it carries you. Mind the branches</span>', 4); } }
+}
+// revenge pays off: after every 5 wasps you beat, the rest keep their distance for a while
+G.calmT = 0; G.calmAt = 5;
+function updateCalm(dt) { if (G.revenge >= G.calmAt) { G.calmAt += 5; G.calmT = 60; toast('<b>The wasps are rattled</b><br><span>they keep their distance for a while</span>', 4); [0, 4, 7].forEach((n, k) => tone(SCALE[n], 0.08, 1.6, 'sine', k * 0.1)); }
+  if (G.calmT > 0) { G.calmT -= dt; for (const w of wasps) if (w.state === 'chase' && !w.calmed) { w.state = 'retreat'; w.t = 0; w.decoy = null; } } }
+function updateBatch2(dt) { updateBranches(dt); updateGusts(dt); updateBrook(dt); updateCalm(dt); }
+
+window.__g = { HOLROOT: HOL.S, BROOK, HOLLOW, GUSTS, BRANCHES, brookSeg, CLOVERS, heatBuzz, callSisters, SWARM, HEAT, archCollide, segSeg, DEWPATH, U, weave, trailFlower, TRAIL, startTrail, trailRoutes, NESTR, NEST, raidNest, eatWasp, rebirth, chew, hero, ZONES, DAY, dragonflies, openZone, forestTrees, FOREST, stores, applyDayLight, MOB, startMob, STONES, ARCHES, WIND, G, gainHoney, wasps, webs, orchTrees, LOG, HILLS, ORCH, keys, sim: (secs) => { for (let i = 0; i < secs * 60; i++) update(1 / 60); }, fish, snap: () => { renderFrame(); return canvas.toDataURL("image/jpeg", 0.85); }, P, THREE, camera, flowers, pads, shrooms, COMBS, chew, takeOff, WY, POND, terrainH, FDIR, FIELD_D, bees };
