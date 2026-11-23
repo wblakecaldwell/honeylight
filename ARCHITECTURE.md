@@ -14,7 +14,7 @@ There are three layers. Each one may use the layer above it, never the layer bel
    `main.js` builds them: it only imports the modules and calls their `setupX()` steps, in a fixed order.
    `src/loop.js` runs every frame and calls each module's `updateX(dt)`. `src/debug.js` puts the handles that others need on `window.__g`.
 3. **Features in their own files, next to `main.js`.** The night (`night.js`, `moonflowers.js`), moths (`moths.js`, `moth-model.js`),
-   the bat (`bat.js`, `bat-model.js`), the storm (`storm.js`, `storm-view.js`) and the try-out menu (`stage-menu.js`).
+   the bat (`bat.js`, `bat-model.js`), the long run's fireflies at night (`runnight.js`), the storm (`storm.js`, `storm-view.js`) and the try-out menu (`stage-menu.js`).
    `index.html` loads each one with its own `<script type="module">` line after `main.js`. Nothing in `src/` imports them.
 
 ## Step 1: decide where it goes

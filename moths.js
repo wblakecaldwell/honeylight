@@ -17,6 +17,7 @@ if (g && N && N.parts && !N.off('moths')) {
   const view = makeMoths(g, MAXM); if (!view.group.parent) g.scene.add(view.group); view.group.visible = false;
   const MF = N.moonflowers, M = [], _v = new V3(), _t = new V3(), _pose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, flap: 1, drink: 0, vis: 0 };
   for (let i = 0; i < MAXM; i++) M.push({ i, p: new V3(0, -900, 0), v: new V3(), state: 'away', f: null, T: 0, at: 0, ph: rnd(TAU), yaw: 0, vis: 0, drink: 0, flap: 1, side: new V3(), avoid: null, avoidT: 0, fed: false, hb: null, dustT: 0 });
+  const lights = () => N.tail + (N.runFlies || 0); // fireflies behind the bee: the night's tail, and those that follow a bee in the zone on the long run (runnight.js)
   const MO = N.moths = { list: M, count: 0, drained: 0, shooed: 0, lured: 0, told: false, guided: 0, opened: 0, found: 0 };
 
   // ---- night blooms: four hidden flowers in places a bee does not go to by chance. A night bloom stays a shut bud until a fed moth lands on it.
@@ -99,7 +100,7 @@ if (g && N && N.parts && !N.off('moths')) {
       m.vis = Math.min(1, m.vis + dt * 0.5);
       const db = m.p.distanceTo(bee);
       // light draws them: a bee with fireflies behind it pulls every moth near it off the flowers
-      if (flying && N.tail >= 3 && db < LURE && m.state !== 'lured' && m.state !== 'leave' && m.state !== 'flee' && m.state !== 'guide' && m.state !== 'perch') { release(m); m.state = 'lured'; MO.lured++; g.tipOnce && g.tipOnce('mothLight', 'moths cannot resist the fireflies that follow you', 6); }
+      if (flying && lights() >= 3 && db < LURE && m.state !== 'lured' && m.state !== 'leave' && m.state !== 'flee' && m.state !== 'guide' && m.state !== 'perch') { release(m); m.state = 'lured'; MO.lured++; g.tipOnce && g.tipOnce('mothLight', 'moths cannot resist the fireflies that follow you', 6); }
       // fly close and it startles
       if (flying && db < SHOO && (m.state === 'drink' || m.state === 'seek')) { MO.shooed++; flee(m, bee); }
       if (late && m.state !== 'leave') { release(m); m.state = 'leave'; }
@@ -128,7 +129,7 @@ if (g && N && N.parts && !N.off('moths')) {
         else { const lift = flying && db < SHOO + 1.2 ? 3.4 : 0; _t.set(f.sx + (lift ? m.side.x * 1.5 : 0), f.y + 1.0 + lift + 0.05 * Math.sin(time * 1.7 + m.ph), f.sz + (lift ? m.side.z * 1.5 : 0)); K = 5; speed = 3.2; m.flap = lift || m.p.distanceTo(_t) > 0.5 ? 1 : 0.12; } }
       else if (m.state === 'flee') { m.T -= dt; K = 0.6; _t.copy(m.p).addScaledVector(m.v, 1); _t.y = terrainH(m.p.x, m.p.z) + 14; if (m.T <= 0) { m.state = 'seek'; m.T = 0; } }
       else if (m.state === 'lured') {
-        if (N.tail < 1 || db > LURE + 14 || !flying) { m.state = 'rest'; m.T = 6; } // the light is gone: it circles, confused, then goes back to the flowers
+        if (lights() < 1 || db > LURE + 14 || !flying) { m.state = 'rest'; m.T = 6; } // the light is gone: it circles, confused, then goes back to the flowers
         else { const a = time * 1.5 + m.ph, sp = P.vel.length(), bx = sp > 1 ? P.vel.x / sp : 0, bz = sp > 1 ? P.vel.z / sp : 1;
           _t.set(bee.x - bx * 3.2 + Math.cos(a) * 2.4, bee.y + 0.9 + Math.sin(a * 1.3) * 0.9, bee.z - bz * 3.2 + Math.sin(a) * 2.4); K = 5; speed = Math.max(SPEED, sp + 5); }
       } else if (m.state === 'leave') { _t.copy(m.p).addScaledVector(m.side.lengthSq() ? m.side : _v.set(1, 0, 0), 30); _t.y = m.p.y + 12; m.vis = Math.max(0, m.vis - dt * 0.9); if (m.vis <= 0) { m.state = 'away'; m.at = 9; continue; } }

@@ -113,6 +113,10 @@ export function setupDewPath() {
 
 export function dewPathD(x, z) { const b = DEWPATH.box; if (x < b[0] || x > b[1] || z < b[2] || z > b[3]) return 1e9; let m = 1e18; for (const p of DEWPATH.S) { const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < m) m = d; } return Math.sqrt(m); }
 
+// runworld.js hook: the bow wave. Grass ahead of a bee in the zone leans away from its line (uWake, uWakeD in engine.js). At strength 0 it adds nothing
+const WAKEGLSL = `if(uWake.z>0.0){ vec2 rel=aOff.xz-uWake.xy, wd=uWakeD.xy; float al=dot(rel,wd); vec2 sv=rel-wd*al; float sl=length(sv);
+    float wk=uWake.z*smoothstep(-uWakeD.w,0.0,al)*(1.0-smoothstep(uWakeD.z*0.45,uWakeD.z,al))*(1.0-smoothstep(uWake.w*0.45,uWake.w,sl));
+    w.xz+=(sv/max(sl,0.05)*0.9+wd*0.3)*wk*y*y*h*0.55; w.y-=wk*y*y*h*0.2; }`;
 // model pass grass: tufts of three slim, twisting blades with a midrib, dry tips and the odd seed spike
 function GRASS_MP() { return mat(`varying float vH; varying float vT; varying float vSeed; varying float vR;
 void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015);
@@ -122,7 +126,7 @@ void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015);
   float dry=smoothstep(0.8,1.0,vH)*step(0.5,vR); alb=mix(alb,vec3(0.52,0.44,0.20),dry*0.7);
   alb=mix(alb,vec3(0.50,0.42,0.22)*(0.75+0.5*vnoise(vec2(vL.x*9.0,vH*60.0))),vSeed*smoothstep(0.5,0.6,vH));
   gl_FragColor=vec4(finish(shade(alb,n,vW,0.3*vH,0.9),vW),1.0); }`, { side: THREE.DoubleSide, vert: `
-attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT; varying float vSeed; varying float vR;
+attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; uniform vec4 uWake; uniform vec4 uWakeD; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT; varying float vSeed; varying float vR;
 void main(){ float bi=position.z, y=position.y, sd=position.x;
   float r1=fract(sin(aPar.z*12.9898+bi*78.233)*43758.5453), r2=fract(r1*91.7+bi*0.37);
   float seed=step(bi,0.5)*step(fract(aPar.z*3.71),0.07);
@@ -134,6 +138,7 @@ void main(){ float bi=position.z, y=position.y, sd=position.x;
   float tw=y*(r2-0.5)*1.8;
   vec3 l=vec3(sd*wid*cos(tw), y*h-0.3*bend*bend/max(h,1.0), bend+sd*wid*sin(tw));
   vec3 w=aOff+vec3(bo.x,0.0,bo.y)+vec3(l.x*c-l.z*s, l.y, l.x*s+l.z*c);
+  ${WAKEGLSL}
   vW=w; vL=vec3(sd,y,bi); vC=vec3(1.0); vUv=vec2(0.0); vN=normalize(vec3(-s,0.0,c)*0.7+vec3(c,0.0,s)*sd*0.7+vec3(0.0,0.5+y*0.4,0.0)); vH=y; vT=aPar.w; vSeed=seed; vR=r2;
   gl_Position=projectionMatrix*viewMatrix*vec4(w,1.0); }` }); }
 function grassTuftGeo(g) { const P = [], I = []; for (let b = 0; b < 3; b++) { const o = b * 9; for (const y of [0, 0.3, 0.55, 0.78]) P.push(-0.5, y, b, 0.5, y, b); P.push(0, 1, b);
@@ -157,11 +162,12 @@ export function setupGrass() {
     const m = MP ? GRASS_MP() : mat(`varying float vH; varying float vT; void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015); vec3 alb=mix(vec3(0.03,0.10,0.02),mix(vec3(0.30,0.50,0.09),vec3(0.46,0.50,0.16),smoothstep(0.45,0.7,patchy)),vH)*vT; alb*=0.85+0.25*(1.0-smoothstep(0.0,0.1,abs(vL.x)));
     alb=mix(alb,vec3(0.5,0.45,0.18),smoothstep(0.85,1.0,vH)*step(1.1,vT));
     gl_FragColor=vec4(finish(shade(alb,n,vW,0.25*vH,0.9),vW),1.0); }`, { side: THREE.DoubleSide, vert: `
-    attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT;
+    attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; uniform vec4 uWake; uniform vec4 uWakeD; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT;
     void main(){ float h=aPar.x, c=cos(aPar.y), s=sin(aPar.y), y=position.y;
       float bend=y*y*(0.8+sin(uTime*1.2+aPar.z+aOff.x*0.04+aOff.z*0.03)*0.7)*h*0.2;
       vec3 l=vec3(position.x*1.1*(1.0-y*0.8), y*h, bend);
       vec3 w=aOff+vec3(l.x*c-l.z*s, l.y, l.x*s+l.z*c);
+      ${WAKEGLSL}
       vW=w; vL=position; vC=vec3(1.0); vUv=vec2(0.0); vN=normalize(vec3(-s*0.7,0.5+y*0.4,c*0.7)); vH=y; vT=aPar.w;
       gl_Position=projectionMatrix*viewMatrix*vec4(w,1.0); }` });
     const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; scene.add(mesh); grassMesh = mesh;

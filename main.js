@@ -28,6 +28,7 @@ import * as gardenway from './src/gardenway.js';
 import * as waterway from './src/waterway.js';
 import * as mossway from './src/mossway.js';
 import * as highbranch from './src/highbranch.js';
+import * as runworld from './src/runworld.js';
 
 engine.setupColorSpace();
 world.setupLandmarks();
@@ -109,3 +110,4 @@ gardenway.setupGardenWay();
 waterway.setupWaterway();
 mossway.setupMossway();
 highbranch.setupHighBranch();
+runworld.setupRunWorld();

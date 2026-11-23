@@ -22,6 +22,7 @@ import { A, tone, SCALE, noiseHit, sweep, setG } from './audio.js';
 import { GW, gapsInput, gapsStep, gapsFrame } from './gaps.js';
 import { runFrame } from './longrun.js';
 import { waterwayFrame } from './waterway.js';
+import { updateRunWorld } from './runworld.js';
 
 // ---------- main loop ----------
 export const fwd = new V3(), right = new V3(), acc = new V3(), tmp = new V3(), camPos = new V3();
@@ -159,6 +160,7 @@ export function update(dt) {
 
   gapsFrame(dt, time);
   runFrame(dt); // longrun.js: the long run round the map
+  updateRunWorld(dt); // runworld.js: the grass, flowers, petals and dew answer a bee in the zone
   waterwayFrame(dt); // waterway.js: the little waterfall wets a bee that flies through it
   updateWind(dt); updateAirLife(dt); updateRescueShadowAndWaspSound(dt); updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateForagingAndHedgeWind(dt); updateParts(dt); updateHud(dt);
 

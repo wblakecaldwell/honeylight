@@ -53,6 +53,9 @@ export function setupShaders() {
   U.uNight = { value: 0 }; U.uLamp = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uLampC = { value: new V3(1.0, 0.78, 0.36) };
   // long run hook (longrun.js): uAura is the coloured light round the bee while it is in the zone (xyz, strength); off (0) it adds nothing
   U.uAura = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uAuraC = { value: new V3(1.0, 0.8, 0.3) };
+  // runworld.js hooks: uWake is the grass bow wave ahead of a bee in the zone (x, z of its centre, strength, reach to the side) and uWakeD (direction x, z, reach ahead, reach behind);
+  // uRunWarm warms the light at the top tier. At 0 they add nothing
+  U.uWake = { value: new THREE.Vector4(0, 0, 0, 9) }; U.uWakeD = { value: new THREE.Vector4(0, -1, 14, 5) }; U.uRunWarm = { value: 0 };
   // storm hooks (storm.js): uStorm = (direction x, direction z, where the cloud edge is in the sky, strength 0..1); uStorm2 = (the cloud's far edge, rain mist, gloom under the cloud)
   U.uStorm = { value: new THREE.Vector4(1, 0, 0, 0) }; U.uStorm2 = { value: new V3(0, 0, 0) };
   COMMON = `
@@ -267,7 +270,7 @@ export function setupPost() {
     void main(){ vec2 t=uTex*uR; vec3 s=texture2D(tSrc,vUv+vec2(-t.x,-t.y)).rgb+texture2D(tSrc,vUv+vec2(t.x,-t.y)).rgb+texture2D(tSrc,vUv+vec2(-t.x,t.y)).rgb+texture2D(tSrc,vUv+vec2(t.x,t.y)).rgb;
       s=s*0.25*0.5+texture2D(tSrc,vUv).rgb*0.5;
       gl_FragColor=vec4(s+texture2D(tAdd,vUv).rgb,1.0); }`, { tSrc: { value: null }, tAdd: { value: null }, uTex: { value: new THREE.Vector2() }, uR: { value: 1 } });
-    const finalM = pm(`uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform float uExpo; uniform float uTime; uniform float uWarm; varying vec2 vUv;
+    const finalM = pm(`uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform float uExpo; uniform float uTime; uniform float uWarm; uniform float uRunWarm; varying vec2 vUv;
     vec3 aces(vec3 c){ return (c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14); }
     void main(){
       vec3 c=texture2D(tScene,vUv).rgb; vec3 b=texture2D(tBloom,vUv).rgb;
@@ -275,6 +278,7 @@ export function setupPost() {
       c=max(c,vec3(0.0)); b=max(b,vec3(0.0));
       c=c+b*uBloom;
       c*=uExpo;
+      if(uRunWarm>0.0) c*=mix(vec3(1.0),vec3(1.12,1.02,0.84),uRunWarm); // runworld.js: the light warms at the top tier of the long run
       // golden-hour grade: warm highlights, slightly cool shadows, a touch more saturation
       float l=dot(c,vec3(0.2126,0.7152,0.0722));
       c=mix(vec3(l),c,1.08);
@@ -285,7 +289,7 @@ export function setupPost() {
       c=c*0.985+0.01*vec3(1.0,0.88,0.7)*(1.0-c); // lifted, creamy blacks
       float n=fract(sin(dot(vUv*vec2(913.1,577.7)+fract(uTime)*17.0,vec2(12.9898,78.233)))*43758.5453);
       c+=(n-0.5)/255.0*1.5;
-      gl_FragColor=vec4(c,1.0); }`, { tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.22 }, uExpo: { value: 1.0 }, uTime: U.uTime, uWarm: { value: 1 } });
+      gl_FragColor=vec4(c,1.0); }`, { tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.22 }, uExpo: { value: 1.0 }, uTime: U.uTime, uWarm: { value: 1 }, uRunWarm: U.uRunWarm });
     function pass(m, target) { quad.material = m; renderer.setRenderTarget(target); renderer.render(qs, quadCam); }
     function resize() {
       const pr = renderer.getPixelRatio(), w = Math.max(4, Math.floor(innerWidth * pr)), h = Math.max(4, Math.floor(innerHeight * pr));
