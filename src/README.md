@@ -43,8 +43,5 @@ The try-out menu is `stage-menu.js` (a play-test tool: a list that jumps to a st
 
 ## Where does new code go?
 
-- **A new feature** gets its own file, like `night.js`. It talks to the game through `window.__g` and small, named hooks, and it can be switched off with one query switch.
-- **A new piece that runs at load time** in `src/` gets a new `setupX()` step at the **end** of `main.js`. Put it somewhere else only if the tests prove that place is safe (all screenshots still pixel-exact).
-- **A new thing that runs every frame** goes in an `updateX(dt)` function in the module it belongs to. It is called from `loop.js`.
-- **A new handle for tests** goes in `debug.js`. Do not remove or rename a key of `window.__g`: tests and tools use them.
-- **A new subject** that fits no file gets a new file with a `// Honeylight: ...` header line, and a row in this table.
+See `ARCHITECTURE.md` at the top of the game folder. It says where a new feature goes (a feature file, a `src/` module, or a change
+to a module that exists), how to split it into behavior and view, and which tests and requirements come with it.
