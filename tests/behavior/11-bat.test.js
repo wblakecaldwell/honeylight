@@ -1,4 +1,4 @@
-// The bat (bat.js): from the third night the air above the treetops belongs to the bats. Requirement IDs NGT-041 to NGT-048.
+// The bat (bat.js): every night the air above the treetops belongs to the bats. Requirement IDs NGT-041 to NGT-048.
 // NIGHT.bat.debug.put(u) sets the bat on its round (u = 0..1).
 // hold(x, z, up, secs, each): the bee is held `up` above the ground at x, z for `secs` seconds; each(i) runs after every step of 1/30 s.
 const night = n => `T.fly(0, -4, 120); T.quiet(); __g.DAY.n = ${n}; NIGHT.debug.begin(0.3, 2); const N = NIGHT, g = __g, P = g.P, B = N.bat, V = g.THREE.Vector3, K = B.debug.K; if (N.moths) N.moths.count = 0;
@@ -6,12 +6,12 @@ const night = n => `T.fly(0, -4, 120); T.quiet(); __g.DAY.n = ${n}; NIGHT.debug.
   const hold = (x, z, up, secs, each) => { const y = g.terrainH(x, z) + up; for (let i = 0; i < secs * 30; i++) { if (P.mode === 'fly') T.place(x, y, z); T.sim(1 / 30); if (each && each(i) === false) break; } };`;
 const run = (body, n = 3) => new Function(night(n) + body);
 module.exports = [
-  { id: 'NGT-041-bat-night-three', req: 'NGT-041', name: 'No bat on the first two nights; from the third night one bat comes after the moon is up',
+  { id: 'NGT-041-bat-every-night', req: 'NGT-041', name: 'The bat is there every night, from the first: it comes after the moon is up; in the daytime there is none',
     async run(t) {
-      const a = await t.ev(run(`T.sim(5); return { on: B.on, shown: B.debug.view.group.visible };`, 2)); t.eq(a, { on: false, shown: false }, 'second night: no bat');
+      const a = await t.ev(() => { T.fly(0, -4, 120); T.quiet(); T.sim(2); const B = NIGHT.bat; return { on: B.on, shown: B.debug.view.group.visible }; }); t.eq(a, { on: false, shown: false }, 'daytime: no bat');
       await t.reopen();
-      const b = await t.ev(() => { const g = __g, N = NIGHT; T.fly(0, -4, 120); T.quiet(); g.DAY.n = 3; g.DAY.t = 0.9995; T.sim(1); const B = N.bat, o = { on: B.on, early: B.state }; N.k = 1; N.t = 0.11; T.sim(8); o.later = B.state; o.vis = B.vis > 0.9; return o; });
-      t.eq(b.on, true, 'third night: the bat is there'); t.eq(b.early, 'roost', 'not at once'); t.check(b.later === 'cruise' || b.later === 'climb', 'then it flies: ' + b.later); t.check(b.vis, 'and it shows');
+      const b = await t.ev(() => { const g = __g, N = NIGHT; T.fly(0, -4, 120); T.quiet(); g.DAY.n = 1; g.DAY.t = 0.9995; T.sim(1); const B = N.bat, o = { on: B.on, early: B.state }; N.k = 1; N.t = 0.11; T.sim(8); o.later = B.state; o.vis = B.vis > 0.9; return o; });
+      t.eq(b.on, true, 'first night: the bat is there'); t.eq(b.early, 'roost', 'not at once'); t.check(b.later === 'cruise' || b.later === 'climb', 'then it flies: ' + b.later); t.check(b.vis, 'and it shows');
       return { a, b };
     } },
 

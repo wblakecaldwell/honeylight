@@ -1,11 +1,11 @@
-// Honeylight: the bat. From the third night the air above the treetops belongs to the bats.
+// Honeylight: the bat. Every night the air above the treetops belongs to the bats.
 // One bat flies a fixed round over the eastern meadow. Late in the night it takes one moth (moths.js), which saves that moth's moonflowers.
 // A bee that flies low is safe all night. A bee that goes too high (more than CEIL above the ground, away from the hive tree)
 // is heard: first a squeak, then echolocation calls that come faster and louder while a bat closes in.
 // Drop below the treetops and the calls fade; the bat turns away. Stay high until the calls run together, and the bat takes the bee:
 // the bee wakes up in its cell at home, and the pollen it carried is gone. Nothing else is lost.
 // Self-contained. It needs night.js. To switch it off add ?bat=0 to the address (or #bat-off).
-// It never calls Math.random and shows nothing in the daytime or before the third night.
+// It never calls Math.random and shows nothing in the daytime.
 import { makeBat } from './bat-model.js';
 const g = window.__g, N = window.NIGHT;
 if (g && N && N.parts && !N.off('bat')) {
@@ -14,7 +14,7 @@ if (g && N && N.parts && !N.off('bat')) {
   let _s = 20261124; const rnd = (a = 1, b) => { _s = (_s + 0x6D2B79F5) >>> 0; let t = _s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296; return b === undefined ? r * a : a + r * (b - a); };
   const _mathRandom = Math.random; Math.random = rnd; // three.js draws a random id for each new object: keep the game's stream untouched
 
-  const CRUISE = 16, DIVE = 40, HIGH = 45, WIND = 0.9, HIT = 1.5, FIRST_NIGHT = 3;
+  const CRUISE = 16, DIVE = 40, HIGH = 45, WIND = 0.9, HIT = 1.5, FIRST_NIGHT = 1;
   const CEIL = 40;    // the bats' air starts this high above the ground: above most treetops, and well above the hive door (about 25)
   const RAMP = 6;     // seconds from the first squeak to the strike for a bee just above CEIL; at CEIL + 40 and higher it is half of that
   const FADE = 2.5;   // seconds below the treetops until a bat that was about to strike has lost the bee

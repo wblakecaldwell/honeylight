@@ -2,7 +2,7 @@
 // A small box at the top right: a day field that warps to the afternoon of any day, a list that jumps to a stage
 // (afternoon, storm, dusk, each kind of night) and sets the day that the stage belongs to, and a checkbox that opens all zones without honey.
 // Self-contained: it talks to the game through window.__g, window.NIGHT and window.STORM, and does nothing until it is used.
-// Hidden for players: it shows only with ?menu=1 in the address (or #menu-on, for pages that drop the ? part). To leave it out of a release, remove its line from index.html.
+// Hidden unless asked for: add #menu-on to the address (or ?menu=1). To leave it out of a release, remove its line from index.html.
 const g = window.__g;
 if (g && (/[?&]menu=1(&|$)/.test(location.search) || location.hash.includes('menu-on'))) {
   const { P, G, DAY, ZONES, FDIR, terrainH } = g, N = window.NIGHT, S = window.STORM;
@@ -12,10 +12,10 @@ if (g && (/[?&]menu=1(&|$)/.test(location.search) || location.hash.includes('men
   const STAGES = [['day', 'Afternoon']];
   if (S) STAGES.push(['storm', 'Storm: it starts to brew'], ['rain', 'Storm: the rain is close'], ['bow', 'Storm: the rain has just passed']);
   STAGES.push(['dusk', 'Dusk']);
-  if (N) { STAGES.push(['night1', 'Night 1: moonflowers and fireflies']);
-    if (N.moths) STAGES.push(['night2', 'Night 2: two moths']);
-    // a night stage sets the day to its number; a storm stage sets the day to a storm day (4, 7, 10 ...)
-    if (N.moths || N.bat) STAGES.push(['night3', 'Night 3: ' + (N.moths ? 'three moths' : '') + (N.moths && N.bat ? ' and ' : '') + (N.bat ? 'the bat' : ''), ], ['night4', 'Night 4: ' + (N.moths ? 'four moths' : '') + (N.moths && N.bat ? ' and ' : '') + (N.bat ? 'the bat' : '')]); }
+  if (N) { // a night stage sets the day to its number; a storm stage sets the day to a storm day (4, 7, 10 ...)
+    const who = n => (N.moths ? ['', 'two', 'two', 'three', 'four'][n] + ' moths' : '') + (N.moths && N.bat ? ' and ' : '') + (N.bat ? 'the bat' : '');
+    STAGES.push(['night1', 'Night 1: moonflowers and fireflies' + (N.moths || N.bat ? ', ' + who(1) : '')]);
+    if (N.moths || N.bat) STAGES.push(['night2', 'Night 2: ' + who(2)], ['night3', 'Night 3: ' + who(3)], ['night4', 'Night 4: ' + who(4)]); }
 
   // a bee that has not hatched yet skips the start: sound on, in the air between the hive and the flower field
   function wake() {

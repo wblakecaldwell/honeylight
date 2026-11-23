@@ -20,6 +20,7 @@ import * as zones from './src/zones.js';
 import * as trails from './src/trails.js';
 import * as loop from './src/loop.js';
 import * as debug from './src/debug.js';
+import * as gaps from './src/gaps.js';
 
 engine.setupColorSpace();
 world.setupLandmarks();
@@ -93,3 +94,4 @@ places.setupBrookLift();
 wasps.setupCalm();
 controls.setupFieldNotes();
 debug.setupDebug();
+gaps.setupGaps();

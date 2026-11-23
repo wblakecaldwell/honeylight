@@ -4,17 +4,19 @@
 const night = n => `T.fly(0, 40, 120); T.quiet(); __g.DAY.n = ${n}; NIGHT.debug.begin(0.3, 2); const N = NIGHT, g = __g, P = g.P, MO = N.moths, MF = N.moonflowers, HB = MO.blooms, far = () => T.place(MF[0].x + 60, MF[0].y + 20, MF[0].z + 60);`;
 const run = (body, n = 2) => new Function(night(n) + body);
 module.exports = [
-  { id: 'NGT-031-moths-night-two', req: 'NGT-031', name: 'No moths on the first night; two on the second, then one more each night up to four; they come one after another',
+  { id: 'NGT-031-moths-every-night', req: 'NGT-031', name: 'Moths come every night: two on the first and the second night, then one more each night up to four; they come one after another',
     async run(t) {
       const a = await t.ev(run(`T.sim(30); return { count: MO.count, shown: MO.debug.view.group.visible, toast: T.text('toast') };`, 1));
-      t.eq(a.count, 0, 'first night: no moths'); t.eq(a.shown, false, 'nothing is drawn'); t.check(!/Moths/.test(a.toast), 'no moth message on the first night');
+      t.eq(a.count, 2, 'first night: two moths'); t.eq(a.shown, true, 'they are drawn');
       await t.reopen();
-      const b = await t.ev(() => { const g = __g, N = NIGHT; T.fly(0, 40, 120); T.quiet(); g.DAY.n = 2; g.DAY.t = 0.9995; T.sim(1); const MO = N.moths, o = { count: MO.count }; N.k = 1; for (const f of N.moonflowers) if (!f.grove) f.open = 1;
+      const b = await t.ev(() => { const g = __g, N = NIGHT; T.fly(0, -4, 120); T.quiet(); g.DAY.n = 2; g.DAY.t = 0.9995; T.sim(1); const MO = N.moths, o = { count: MO.count }; N.k = 1; for (const f of N.moonflowers) if (!f.grove) f.open = 1;
         N.t = 0.06; T.sim(1); o.toast = T.text('toast'); o.early = MO.list.filter(m => m.state !== 'away').length; N.t = 0.15; T.sim(1); o.one = MO.list.filter(m => m.state !== 'away').length; N.t = 0.32; T.sim(1); o.two = MO.list.filter(m => m.state !== 'away').length; return o; });
       t.eq(b.count, 2, 'second night: two moths'); t.check(/Moths are out tonight/.test(b.toast), 'a message tells of the moths: ' + b.toast); t.eq([b.early, b.one, b.two], [0, 1, 2], 'they come one after another');
       await t.reopen();
+      const c3 = await t.ev(run(`return { count: MO.count };`, 3)); t.eq(c3.count, 3, 'third night: three');
+      await t.reopen();
       const c = await t.ev(run(`return { count: MO.count };`, 9)); t.eq(c.count, 4, 'never more than four');
-      return { a, b, c };
+      return { a, b, c3, c };
     } },
 
   { id: 'NGT-032-moth-drinks', req: 'NGT-032', name: 'A moth hovers at an open moonflower and drinks it dry in about 30 seconds; the flower grows dim and gives nothing that night; then the moth has drunk its fill and drinks no more',
@@ -89,7 +91,7 @@ module.exports = [
       t.check(r.back < 1.6, 'the moth sits down again: ' + r.back); t.eq([r.late, r.stillOpen, r.noFlower], ['perch', 1, true], 'it stays on its bloom and goes to no moonflower'); return r;
     } },
 
-  { id: 'NGT-040-night-blooms-places', req: 'NGT-040', name: 'There are four night blooms at fixed places outside the locked zones. Each moth has its own. They are shut again the next night, and not there on the first night or in the day',
+  { id: 'NGT-040-night-blooms-places', req: 'NGT-040', name: 'There are four night blooms at fixed places outside the locked zones. Each moth has its own. They are shut again the next night, and not there in the day',
     async run(t) {
       const day = await t.ev(() => { T.fly(0, 40, 120); T.quiet(); T.sim(0.5); return NIGHT.moths.debug.blooms.group.visible; });
       const first = await t.ev(run(`T.sim(5); return MO.debug.blooms.group.visible;`, 1));
@@ -99,7 +101,7 @@ module.exports = [
         o.hills = [Math.hypot(HB[2].x - H[0].x, HB[2].z - H[0].z), Math.hypot(HB[3].x - H[1].x, HB[3].z - H[1].z)].map(d => +d.toFixed(1)); o.free = HB.map(h => g.zoneBlocked(h.x, h.z));
         far(); MO.debug.put(0, 0); MO.debug.put(1, 1); T.sim(3); MF[0].nectar = 0.02; MF[1].nectar = 0.02; T.sim(2); const a = MO.list[0], b = MO.list[1]; o.states = [a.state, b.state]; o.own = a.hb !== b.hb && !!a.hb && !!b.hb;
         MO.debug.lead(0, 0); T.sim(7); o.open = HB[0].open; N.debug.end(); T.sim(1); o.dayShown = MO.debug.blooms.group.visible; g.DAY.n = 3; N.debug.begin(0.3, 2); o.next = HB.map(h => [h.open, h.woken, h.taken]); return o;`));
-      t.eq([day, first], [false, false], 'nothing in the day or on the first night'); t.eq(r.n, 4, 'four night blooms'); t.eq([r.log, r.cap], [true, true], 'one on the fallen tree, one on the widest mushroom');
+      t.eq([day, first], [false, true], 'nothing in the day; there from the first night'); t.eq(r.n, 4, 'four night blooms'); t.eq([r.log, r.cap], [true, true], 'one on the fallen tree, one on the widest mushroom');
       t.eq(r.hills, [7, 7], 'two just behind hill tops'); t.eq(r.free, [false, false, false, false], 'none is in a locked zone'); t.eq(r.states, ['guide', 'guide'], 'two fed moths'); t.eq(r.own, true, 'each goes to its own bloom');
       t.eq(r.open, 1, 'a bloom opened that night'); t.eq(r.dayShown, false, 'not drawn after the night'); t.eq(r.next, [[0, false, false], [0, false, false], [0, false, false], [0, false, false]], 'the next night all four are shut again'); return r;
     } },

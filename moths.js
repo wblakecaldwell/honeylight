@@ -1,4 +1,4 @@
-// Honeylight: moths. From the second night, hawk moths come for the moonflowers.
+// Honeylight: moths. Every night, hawk moths come for the moonflowers.
 // A moth hovers at an open moonflower and drinks it dry. Fly close and it flutters off; what it left is still yours.
 // Moths cannot resist light: a bee with fireflies behind it draws them away from the flowers.
 // Moths are guides: a moth that has drunk a flower dry flies to a hidden night bloom and lands on it. The bloom opens only for a moth. Follow the moth's wing dust to find it.
@@ -61,7 +61,7 @@ if (g && N && N.parts && !N.off('moths')) {
   }
 
   // how many come: none on the first night, two on the second, then one more each night up to four
-  const howMany = () => { const n = N.nightNo(); return N.now('moths') ? clamp(n, 3, MAXM) : n < 2 ? 0 : clamp(n, 2, MAXM); }; // #moths-now: three at once, on any night
+  const howMany = () => { const n = N.nightNo(); return N.now('moths') ? clamp(n, 3, MAXM) : clamp(n, 2, MAXM); }; // two on the first two nights, then one more each night; #moths-now: three at once, on any night
   function pick(m) { // the nearest open moonflower that still has nectar and that no other moth has chosen
     let best = null, bd = 1e9;
     for (const f of MF) { if (f.grove || f.taken || f.open < 0.85 || f.nectar <= 0 || (f.moth && f.moth !== m) || (f === m.avoid && m.avoidT > 0)) continue;

@@ -208,6 +208,9 @@ export function setupSunShadows() {
   sunUp = Math.abs(SUN.y) > 0.99 ? new V3(1, 0, 0) : new V3(0, 1, 0);
 }
 
+// things built after setupSunShadows (the tight spots) join the shadow casters here
+export function addCasters(root) { root.traverse(o => { if (o.isMesh && !o.material.transparent) casters.push({ o, m: o.material, d: depthMat }); }); }
+
 const depthVert = `void main(){ mat4 m=modelMatrix;
   #ifdef USE_INSTANCING
     m=modelMatrix*instanceMatrix;

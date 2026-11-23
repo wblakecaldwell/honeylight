@@ -9,7 +9,7 @@ import { _v, YA } from './bees.js';
 import { flowers, leafShell, crownLimbs, addFringe } from './plants.js';
 import { WIND, _aC1, _aC2, _aN, segSeg } from './air.js';
 import { P, PR } from './player.js';
-import { webs, WEB_FRAG } from './hazards.js';
+import { webs, webMesh } from './hazards.js';
 import { G, toast } from './progress.js';
 import { noiseHit } from './audio.js';
 import { inHive, time } from './loop.js';
@@ -220,7 +220,7 @@ export function setupForest() {
       for (let j = i + 1; j < forestTrees.length; j++) { const u = forestTrees[j], d = Math.hypot(t.x - u.x, t.z - u.z); if (d < bd) { bd = d; best = u; } }
       if (!best || bd > 30) continue; const r = Math.min(8, bd / 2 - Math.max(t.R, best.R) - 0.8); if (r < 3) continue;
       const sx = (t.x + best.x) / 2, sz = (t.z + best.z) / 2, c = new V3(sx, terrainH(sx, sz) + r + fr(2, 10), sz), nrm = new V3(-(best.z - t.z), 0, best.x - t.x).normalize();
-      const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), mat(WEB_FRAG, { uniforms: { uR: { value: r } }, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+      const m = webMesh(r, bd / 2 / r, webs.length);
       m.scale.setScalar(r); m.position.copy(c); m.lookAt(c.clone().add(nrm)); scene.add(m); webs.push({ c, n: nrm, r, mesh: m, torn: 0, zone: 'forest' }); n++; }
     // foxglove bells hanging down the spikes
     const foxes = flowers.filter(f => f.fox), bellG = new THREE.CylinderGeometry(0.26, 0.78, 1.6, 12, 2, true); bellG.translate(0, -0.8, 0);

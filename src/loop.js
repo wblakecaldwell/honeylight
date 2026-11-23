@@ -19,6 +19,7 @@ import { G, gainHoney, addPollen, updateHud } from './progress.js';
 import { zoneLocked, updateZones } from './zones.js';
 import { updateTrails } from './trails.js';
 import { A, tone, SCALE, noiseHit, sweep, setG } from './audio.js';
+import { GW, gapsInput, gapsStep, gapsFrame } from './gaps.js';
 
 // ---------- main loop ----------
 export const fwd = new V3(), right = new V3(), acc = new V3(), tmp = new V3(), camPos = new V3();
@@ -40,6 +41,7 @@ export function update(dt) {
   U.uTime.value = time;
   camera.rotation.set(P.pitch, P.yaw, 0); viewBlend(); camera.getWorldDirection(fwd); right.set(1, 0, 0).applyQuaternion(camera.quaternion);
   let kf = (keys.has('KeyW') || keys.has('ArrowUp') || touchFwd ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0), ks = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), ku = (keys.has('Space') ? 1 : 0) - (keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyC') ? 1 : 0);
+  if (P.mode === 'fly') [kf, ks, ku] = gapsInput(kf, ks, ku); // gaps.js: no wings while tumbling or down in the grass
   if (keys.has('ArrowLeft')) look(-dt * 700, 0); if (keys.has('ArrowRight')) look(dt * 700, 0);
   let black = 0, thrust = 0;
   const rad = Math.hypot(P.pos.x, P.pos.z);
@@ -83,6 +85,7 @@ export function update(dt) {
       if (!ku) P.vel.y *= 1 - Math.min(1, dt * 1.2 * outF * (kf > 0 ? 1 - Math.min(1, Math.abs(fwd.y) * 1.6) : 1)); }
     P.pos.addScaledVector(P.vel, dt);
     collide(P.pos, P.vel); beeCollide();
+    if (!inHive) gapsStep(dt); // gaps.js: tight spots, clipping and the tumble
     P.landed = null;
     if (!inHive) {
       for (const f of flowers) { const d = Math.hypot(P.pos.x - f.sx, P.pos.z - f.sz); if (flowerHit(f, d, dt) && !flowersClosed()) {
@@ -135,7 +138,7 @@ export function update(dt) {
   const sv = P.vel.dot(right);
   const targetRoll = P.mode === 'fly' ? clamp(P.yawRate * 2.8 - sv * 0.03, -0.6, 0.6) + Math.sin(time * 2.6) * 0.02 * P.pollen : 0;
   P.roll = lerp(P.roll, targetRoll, Math.min(1, dt * 5));
-  camera.position.copy(camPos); camera.rotation.set(P.pitch, P.yaw, P.roll); viewBlend(); camera.updateMatrixWorld(); thirdPerson(dt);
+  camera.position.copy(camPos); camera.rotation.set(P.pitch + (G.third ? 0 : GW.pitch), P.yaw, P.roll + (G.third ? 0 : GW.roll)); viewBlend(); camera.updateMatrixWorld(); thirdPerson(dt); // gaps.js: in the bee's eyes the tumble turns the view; in follow view only the bee turns
   const spd = P.vel.length(); fov = lerp(fov, 74 + Math.min(9, spd * 0.3), Math.min(1, dt * 3)); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   U.uCam.value.copy(camPos); sky.position.copy(camPos);
   ants.forEach((a, i) => { const s = i ? -1 : 1; a.rotation.x = Math.sin(time * 1.7 + i) * 0.05 + clamp(spd * 0.012, 0, 0.3) + (P.mode === 'cell' ? Math.sin(time * 6 + i * 2) * 0.05 : 0); a.rotation.y = s * (Math.sin(time * 1.3 + i * 2) * 0.06) + P.yawRate * 3; });
@@ -152,6 +155,7 @@ export function update(dt) {
   beacon.material.opacity = lerp(beacon.material.opacity, inHive ? 0 : 0.12 + P.pollen * 0.1, Math.min(1, dt));
   fish.userData.tail.rotation.y = Math.sin(time * (P.mode === 'gulp' ? 9 : 3)) * 0.45;
 
+  gapsFrame(dt, time);
   updateWind(dt); updateAirLife(dt); updateRescueShadowAndWaspSound(dt); updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateForagingAndHedgeWind(dt); updateParts(dt); updateHud(dt);
 
   // overlays
@@ -165,7 +169,7 @@ export function update(dt) {
     const hg = inHive ? 0.2 : (0.03 + 0.012 * P.pollen) * (0.55 + 0.45 * facing) + 0.16 * 25 / (25 + dH * dH * 0.06) * 0.3;
     setG(A.humG.gain, P.mode === 'gulp' ? 0.02 : hg, 0.25); if (A.pan.pan) setG(A.pan.pan, inHive ? 0 : clamp(side, -0.9, 0.9), 0.2);
     A.rich.forEach((r, i) => setG(r.g.gain, r.v * clamp(combUniforms.uHoney.value * 6 - i * 0.6 + pulse, 0, 1), 0.6));
-    const flying = P.mode === 'fly'; setG(A.buzzG.gain, flying ? 0.012 + thrust * 0.03 + Math.min(0.02, spd * 0.001) : 0, 0.12); setG(A.buzz.frequency, 185 + spd * 2.5 + thrust * 18 - P.pollen * 4 - P.wet * 25, 0.1); setG(A.buzz2.frequency, 2 * (185 + spd * 2.5 + thrust * 18 - P.pollen * 4), 0.1);
+    const flying = P.mode === 'fly' && !GW.still, rev = GW.rev * GW.rev; setG(A.buzzG.gain, flying ? (0.012 + thrust * 0.03 + Math.min(0.02, spd * 0.001)) * (1 + rev * 1.6) : 0, rev > 0 ? 0.03 : 0.12); setG(A.buzz.frequency, 185 + spd * 2.5 + thrust * 18 - P.pollen * 4 - P.wet * 25 + rev * 90, rev > 0 ? 0.03 : 0.1); setG(A.buzz2.frequency, 2 * (185 + spd * 2.5 + thrust * 18 - P.pollen * 4 + rev * 90), rev > 0 ? 0.03 : 0.1);
     setG(A.windG.gain, outF * (0.035 + Math.min(0.06, spd * 0.003) + 0.05 * WIND.s) * (P.mode === 'gulp' ? 0.2 : 1), 0.4);
     birdT -= dt; if (birdT < 0 && outF > 0.5 && P.mode === 'fly' && !(window.NIGHT && NIGHT.active)) { birdT = rnd(3, 9); const b = rnd(2200, 3600), n = 2 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) setTimeout(() => sweep(b * rnd(0.9, 1.1), b * rnd(1.15, 1.5), 0.09, 0.018), i * rnd(110, 160)); }
   }

@@ -26,34 +26,64 @@ export function setupWebs() {
     for (const s of spots) {
       const r = s.r, gy = terrainH(s.x, s.z), c = new V3(s.x, gy + r + srnd(3, 9), s.z);
       const n = new V3(-s.dz, 0, s.dx).normalize();
-      const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), mat(`uniform float uR;
-      void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW);
-        float r=length(vL.xy), a=atan(vL.y,vL.x), rr=r*uR;
-        float dsp=abs(sin(a*8.0))*rr; float spoke=1.0-smoothstep(0.015,0.06,dsp);
-        float dr=abs(fract(rr/0.85+a/6.2832)-0.5)*0.85; float ring=(1.0-smoothstep(0.012,0.05,dr))*step(0.12,r);
-        float line=max(spoke,ring)*smoothstep(1.0,0.9,r);
-        float dew=step(0.985,hash21(floor(vL.xy*uR*4.0)))*line;
-        float sp=pow(max(dot(reflect(-V,n),uSun),0.0),6.0)+pow(max(dot(-V,uSun),0.0),8.0);
-        vec3 c=vec3(0.85,0.85,0.8)*(0.35+3.5*sp)+vec3(2.5,2.0,1.4)*dew*(0.4+3.0*sp);
-        float al=line*(0.30+0.6*sp)+dew; if(al<0.01) discard;
-        gl_FragColor=vec4(finish(c,vW),clamp(al,0.0,1.0)); }`, { uniforms: { uR: { value: r } }, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+      const d = Math.hypot(s.dx, s.dz) / 2 / r, m = webMesh(r, d, webs.length);
       m.scale.setScalar(r); m.position.copy(c); m.lookAt(c.clone().add(n)); scene.add(m);
       webs.push({ c, n, r, mesh: m, torn: 0 });
     }
   }
 }
 
-export const WEB_FRAG = `uniform float uR;
-      void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW);
-        float r=length(vL.xy), a=atan(vL.y,vL.x), rr=r*uR;
-        float dsp=abs(sin(a*8.0))*rr; float spoke=1.0-smoothstep(0.015,0.06,dsp);
-        float dr=abs(fract(rr/0.85+a/6.2832)-0.5)*0.85; float ring=(1.0-smoothstep(0.012,0.05,dr))*step(0.12,r);
-        float line=max(spoke,ring)*smoothstep(1.0,0.9,r);
-        float dew=step(0.985,hash21(floor(vL.xy*uR*4.0)))*line;
-        float sp=pow(max(dot(reflect(-V,n),uSun),0.0),6.0)+pow(max(dot(-V,uSun),0.0),8.0);
-        vec3 c=vec3(0.85,0.85,0.8)*(0.35+3.5*sp)+vec3(2.5,2.0,1.4)*dew*(0.4+3.0*sp);
-        float al=line*(0.30+0.6*sp)+dew; if(al<0.01) discard;
-        gl_FragColor=vec4(finish(c,vW),clamp(al,0.0,1.0)); }`;
+// an orb web on a flat card: frame, anchor threads out to the trunks at +/-d (in web radii), spokes, capture spiral, dew
+// (one geometry, one material, one mesh, like the old disc, so the seeded random stream does not move)
+export function webMesh(r, d, seed) {
+  return new THREE.Mesh(new THREE.PlaneGeometry(2 * d + 0.1, 2.5), mat(WEB_FRAG, { uniforms: { uR: { value: r }, uD: { value: d }, uSeed: { value: seed } }, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+}
+
+export const WEB_FRAG = `uniform float uR; uniform float uD; uniform float uSeed;
+float wh(float k){ return hash21(vec2(k*1.37+3.1, uSeed*7.13+1.7)); }
+float segD(vec2 p, vec2 a, vec2 b){ vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0); return length(pa-ba*h); }
+vec2 fv(float i){ float a=(i+0.5+0.45*(wh(i+20.0)-0.5))*1.0472; return vec2(cos(a),sin(a))*(0.9+0.12*wh(i+30.0)); }
+float spA(float k){ return (k+0.4*(wh(mod(k,30.0))-0.5))*0.20944; }
+void main(){ vec3 n=NORMAL; vec3 V=normalize(uCam-vW);
+  vec2 p=vL.xy; float aa=max(fwidth(p.x)*uR,0.004), thin=0.008;
+  float cov=clamp(2.5*thin/aa,0.3,1.0);
+  // frame: a lopsided six-sided loop, held out to the two trunks by anchor threads
+  float inner=1e9, dF=1e9; vec2 v0=fv(5.0);
+  for(int i=0;i<6;i++){ vec2 v1=fv(float(i)); vec2 e=v1-v0; dF=min(dF,segD(p,v0,v1)); inner=min(inner,(e.x*(p.y-v0.y)-e.y*(p.x-v0.x))/length(e)); v0=v1; }
+  vec2 f0=fv(0.0), f1=fv(1.0), f2=fv(2.0), f3=fv(3.0), f4=fv(4.0), f5=fv(5.0);
+  float dA=min(min(segD(p,f0,vec2(uD,f0.y+0.25+0.3*wh(40.0))), segD(p,f5,vec2(uD,f5.y-0.2-0.3*wh(41.0)))),
+               min(segD(p,f2,vec2(-uD,f2.y+0.25+0.3*wh(42.0))), segD(p,f3,vec2(-uD,f3.y-0.2-0.3*wh(43.0)))));
+  float sd=wh(44.0)<0.5?-1.0:1.0; dA=min(dA, min(segD(p,f1,vec2(sd*uD,1.12)), segD(p,f4,vec2(-sd*uD,-1.12))));
+  // spokes from a hub that sits a little above the middle
+  vec2 q=p-vec2(0.04*(wh(1.0)-0.5),0.07); float r=length(q), a=atan(q.y,q.x);
+  float k=floor(a/0.20944); if(a<spA(k)) k-=1.0; else if(a>spA(k+1.0)) k+=1.0;
+  float a0=spA(k), a1=spA(k+1.0), dS=min(r*abs(sin(a-a0)), r*abs(sin(a-a1)));
+  float ins=step(0.0,inner);
+  // capture spiral: straight steps from spoke to spoke, winding outward
+  float h=(a1-a0)*0.5, rp=r*cos(a-(a0+a1)*0.5)/cos(h), t=clamp((a-a0)/(a1-a0),0.0,1.0);
+  float u=(k+15.0+t)/30.0, R0=0.25, x=max(rp-R0,0.0)/0.7, f=pow(x+1e-4,0.85)*14.0-u, m=floor(f+0.5), sp=1.0/(11.9*pow(x+0.02,-0.15)/0.7);
+  float spiral=step(R0-0.01,rp)*step(0.035,inner)*step(0.05,hash21(vec2(k*3.7+uSeed,m*1.3)));
+  float dC=abs(f-m)*sp*uR;
+  // hub: a tight little mesh where the spider waits
+  float hs=0.016, dH=abs(fract(rp/hs)-0.5)*hs*uR;
+  float L=(1.0-smoothstep(thin*1.6,thin*1.6+aa,dF*uR))*ins+(1.0-smoothstep(thin*1.6,thin*1.6+aa,dA*uR))*step(inner,0.002);
+  L=max(L,(1.0-smoothstep(thin*1.25,thin*1.25+aa,dS*uR))*ins*step(0.012,r));
+  L=max(L,(1.0-smoothstep(thin,thin+aa,dC))*spiral);
+  L=max(L,(1.0-smoothstep(thin,thin+aa,dH))*step(0.02,r)*step(rp,0.075));
+  L=min(L,1.0)*cov;
+  // dew beads strung along the sticky spiral
+  float bs=0.2, chord=2.0*rp*sin(h)*uR, s=t*chord/bs, bi=floor(s);
+  float bh=hash21(vec2(bi+k*17.0, m*3.1+uSeed)), br=0.022+0.05*pow(fract(bh*7.0),3.0);
+  float dB=length(vec2((fract(s)-0.5)*bs, dC)), dew=(1.0-smoothstep(br,br+aa,dB))*step(0.62,bh)*spiral*step(m,13.0)*step(0.0,f+0.5);
+  float glint=pow(max(dot(reflect(-V,n),uSun),0.0),6.0)+pow(max(dot(-V,uSun),0.0),8.0);
+  vec3 ir=0.5+0.5*cos(6.2832*(dot(V,n)*2.0+r*3.0+vec3(0.0,0.33,0.67)));
+  vec3 silk=vec3(0.88,0.88,0.84)*(0.45+3.2*glint)+ir*0.35*glint;
+  float core=1.0-dB/max(br,1e-3);
+  vec3 drop=vec3(0.75,0.85,0.95)*(0.5+0.8*core)+vec3(2.6,2.2,1.6)*(0.3+3.0*glint)*pow(max(core,0.0),3.0);
+  vec3 c=mix(silk,drop,dew); float al=max(L*(0.24+0.6*glint),dew*(0.5+0.4*core));
+  if(al<0.01) discard;
+  gl_FragColor=vec4(finish(c,vW),clamp(al,0.0,1.0)); }
+`;
 
 // dragonflies: fast hunters that patrol the pond
 export const dragonflies = [];

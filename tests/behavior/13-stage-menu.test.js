@@ -7,24 +7,22 @@ const PRE = `const g = __g, P = g.P, N = NIGHT, S = STORM, sel = document.getEle
   const state = () => ({ mode: P.mode, day: g.DAY.n, t: Math.round(g.DAY.t * 100) / 100, night: N.active, moths: N.active ? N.moths.count : 0, bat: N.active && N.bat.on, storm: S.on });
 `;
 const run = body => new Function(PRE + body);
-const ON = { query: '?menu=1' }; // the menu shows only with ?menu=1 (or #menu-on)
+const ON = { query: '?menu=1' }; // the menu is hidden unless asked for
 module.exports = [
-  { id: 'TRY-001-menu', req: 'TRY-001', name: 'A small menu at the top right lists the stages and has a checkbox for the zones. It is there only with ?menu=1 or #menu-on. Unused, it changes nothing',
-    open: ON,
+  { id: 'TRY-001-menu', open: ON, req: 'TRY-001', name: 'A small menu at the top right lists the stages and has a checkbox for the zones. It is there only with ?menu=1 or #menu-on. Unused, it changes nothing',
     async run(t) {
       const a = await t.ev(run(`return { box: !!document.getElementById('stagemenu'), stages: [...sel.options].map(o => o.value).filter(Boolean), labels: [...sel.options].map(o => o.text), checked: chk.checked, dayField: num.value, right: document.getElementById('stagemenu').style.right };`));
       t.eq(a.box, true, 'the menu is on the page'); t.eq(a.stages, ['day', 'storm', 'rain', 'bow', 'dusk', 'night1', 'night2', 'night3', 'night4'], 'the stages');
       t.eq(a.labels[8], 'Night 3: three moths and the bat', 'a label'); t.eq([a.checked, a.dayField], [false, '1'], 'the zones box starts clear and the day field shows day 1');
       const script = () => { const g = __g; T.fly(60, 10, 40); g.DAY.t = 0.3; T.key('KeyW'); T.sim(20); g.P.yaw = 2; T.sim(20); T.key('KeyW', false); return [g.P.pos.x, g.P.pos.y, g.P.pos.z, g.DAY.t, JSON.stringify(g.G.zones), Math.random()]; };
-      const gone = () => [typeof window.STAGES, !!document.getElementById('stagemenu')];
-      await t.reopen(ON); const on = await t.ev(script); await t.reopen({ query: '' }); const off = await t.ev(script); const there = await t.ev(gone);
-      t.eq(there, ['undefined', false], 'with no flag in the address there is no menu');
-      await t.reopen({ query: '?menu=0' }); t.eq(await t.ev(gone), ['undefined', false], 'nor with ?menu=0');
-      await t.reopen({ query: '#menu-on' }); t.eq(await t.ev(gone), ['object', true], 'with #menu-on the menu is there'); t.eq(on, off, 'an unused menu changes nothing in 40 seconds of flight'); return a;
+      const there = () => [typeof window.STAGES, !!document.getElementById('stagemenu')];
+      await t.reopen(ON); const on = await t.ev(script); await t.reopen(); const off = await t.ev(script); const none = await t.ev(there);
+      await t.reopen({ query: '?menu=0' }); const zero = await t.ev(there); await t.reopen({ query: '#menu-on' }); const hash = await t.ev(() => !!document.getElementById('stagemenu'));
+      t.eq(none, ['undefined', false], 'with no flag there is no menu'); t.eq(zero, ['undefined', false], 'with ?menu=0 there is no menu'); t.eq(hash, true, 'with #menu-on the menu is there');
+      t.eq(on, off, 'an unused menu changes nothing in 40 seconds of flight'); return a;
     } },
 
-  { id: 'TRY-002-jump-from-start', req: 'TRY-002', name: 'A stage picked on the title screen skips the hatching: the bee is in the air outside the hive and the stage starts. A night stage sets the day to its number',
-    open: ON,
+  { id: 'TRY-002-jump-from-start', open: ON, req: 'TRY-002', name: 'A stage picked on the title screen skips the hatching: the bee is in the air outside the hive and the stage starts. A night stage sets the day to its number',
     async run(t) {
       const r = await t.ev(run(`const o = { before: P.mode }; pick('night3'); o.picked = sel.value; o.title = document.getElementById('title').style.display; o.at = state(); o.outside = !g.inHive && Math.hypot(P.pos.x, P.pos.z) > 30;
         o.moon = N.t >= 0.12; stay(12); o.bat = N.bat.state !== 'roost'; o.mothOut = N.moths.list.some(m => m.state !== 'away'); o.day = g.DAY.n; o.field = num.value; o.saved = T.save().day.n; return o;`));
@@ -33,8 +31,7 @@ module.exports = [
       t.eq([r.moon, r.bat, r.mothOut], [true, true, true], 'the moon is up, and within 12 seconds the bat flies and a moth is out'); t.eq([r.day, r.field, r.saved], [3, '3', 3], 'the day is 3 in the game, in the day field and in the save'); return r;
     } },
 
-  { id: 'TRY-003-jump-between', req: 'TRY-003', name: 'Each stage can be picked from any other: a night ends for a storm, a storm ends for an afternoon, and so on',
-    open: ON,
+  { id: 'TRY-003-jump-between', open: ON, req: 'TRY-003', name: 'Each stage can be picked from any other: a night ends for a storm, a storm ends for an afternoon, and so on',
     async run(t) {
       const r = await t.ev(run(`const o = {}; T.fly(0, 40, 120); T.quiet(); const fx = g.FDIR.x * 90, fz = g.FDIR.z * 90; T.place(fx, g.terrainH(fx, fz) + 12, fz); T.sim(0.1);
         pick('night4'); stay(1); o.night4 = state(); pick('storm'); stay(1); o.storm = state(); o.stormT = Math.round(S.T); o.uNight = g.U.uNight.value; o.toast = T.text('toast');
@@ -46,14 +43,13 @@ module.exports = [
       const st = (day, t, o = {}) => ({ mode: 'fly', day, t, night: false, moths: 0, bat: false, storm: false, ...o });
       t.eq(r.night4, st(4, 1, { night: true, moths: 4, bat: true }), 'night 4 is day 4'); t.eq(r.storm, st(4, 0.42, { storm: true }), 'then a storm: the night is over, and day 4 is a storm day'); t.eq([r.stormT, r.uNight], [1, 0], 'it has just started to brew, in daylight');
       t.check(/The air goes still/.test(r.toast), 'with its own message: ' + r.toast); t.eq([r.rainT, r.closed], [39, true], 'the rain is close: flowers shut'); t.eq([r.bow, r.open, r.past], [true, true, true], 'the rain has just passed: flowers open, the rainbow comes');
-      t.eq(r.night1, st(1, 1, { night: true }), 'night 1 is day 1: no moths, no bat'); t.eq(r.night2, st(2, 1, { night: true, moths: 2 }), 'night 2 is day 2: two moths');
+      t.eq(r.night1, st(1, 1, { night: true, moths: 2, bat: true }), 'night 1 is day 1: two moths and the bat'); t.eq(r.night2, st(2, 1, { night: true, moths: 2, bat: true }), 'night 2 is day 2: two moths and the bat');
       t.eq([r.dusk, r.shut], [st(2, 0.9), true], 'dusk of the same day: flowers closing'); t.eq([r.dayS, r.clean], [st(2, 0.05), [0, 0, 0]], 'afternoon of the same day: no trace of night or storm');
       t.eq(r.storm5, 7, 'a storm picked on day 5 is on day 7, the next storm day');
       t.eq(r.refused, true, 'no jump while the day card shows'); return r;
     } },
 
-  { id: 'TRY-004-all-zones', req: 'TRY-004', name: 'The checkbox opens all zones without honey. It stays on after a reload. Clearing it brings the zones back as they were',
-    open: ON,
+  { id: 'TRY-004-all-zones', open: ON, req: 'TRY-004', name: 'The checkbox opens all zones without honey. It stays on after a reload. Clearing it brings the zones back as they were',
     async run(t) {
       const a = await t.ev(run(`T.fly(0, 40, 120); T.quiet(); const o = {}, lily = g.flowers.find(f => f.zone === 'pond'), zf = g.flowers.find(f => f.zone === 'forest'), orch = g.flowers.find(f => f.orch);
         o.before = [JSON.stringify(g.G.zones), !!g.G.orchard, !!g.zoneLocked(lily), !!g.zoneLocked(zf), !!g.zoneLocked(orch), g.zoneBlocked(g.POND.x, g.POND.z)]; o.spent = g.G.spent | 0;
@@ -68,8 +64,7 @@ module.exports = [
       t.eq(b.back, ['{}', false, true], 'cleared: the zones are locked as before'); t.eq([b.labels, b.key, b.save], [[true, true, true], null, {}], 'the stones show their price again and the save holds the old zones'); return { a, b };
     } },
 
-  { id: 'TRY-005-day-field', req: 'TRY-005', name: 'The day field shows the day and warps to the afternoon of any day. What belongs to that day then comes by itself: the storm on day 7, four moths and the bat that night',
-    open: ON,
+  { id: 'TRY-005-day-field', open: ON, req: 'TRY-005', name: 'The day field shows the day and warps to the afternoon of any day. What belongs to that day then comes by itself: the storm on day 7, four moths and the bat that night',
     async run(t) {
       const r = await t.ev(run(`const o = {}; T.fly(0, 40, 120); T.quiet(); const fx = g.FDIR.x * 90, fz = g.FDIR.z * 90; T.place(fx, g.terrainH(fx, fz) + 12, fz); T.sim(0.1);
         pick('night2'); stay(1); setDay(7); o.at = state(); o.toast = T.text('toast'); o.saved = T.save().day.n; o.field = num.value;

@@ -15,6 +15,7 @@ import { G } from './progress.js';
 import { zoneWalls, forestCollide } from './zones.js';
 import { tone, noiseHit, sweep } from './audio.js';
 import { camPos, inHive, time } from './loop.js';
+import { GW } from './gaps.js';
 
 // ---------- first-person body ----------
 export const ants = [];
@@ -99,7 +100,7 @@ export function setupThirdPerson() {
   try { G.third = localStorage.getItem('honeylight.view') !== '1'; } catch (e) { G.third = true; } // a new game starts with the camera outside the bee; V changes it and the choice is kept
   me = newBee(1); me.s.set(0.001, 0.001, 0.001);
   _yflip = new Q4().setFromAxisAngle(YA, Math.PI);
-  me.update = () => { const on = G.third && camDist > 0.7 && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6, P.yaw, P.roll * 1.3)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.6, -1.2, 1.2); me.fly = P.mode === 'fly'; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
+  me.update = () => { const on = G.third && camDist > 0.7 && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6 + GW.pitch, P.yaw, P.roll * 1.3 + GW.roll)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.6, -1.2, 1.2); me.fly = P.mode === 'fly' && !GW.still; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
   P.cdir = new V3(0, 1, 0);
   // on the comb the bee waddles when it walks: the body swings from side to side, as the sisters do (P.wad and P.wadPh come from loop.js)
   { const mu = me.update; me.update = (dt, t) => { mu(dt, t); if (P.mode === 'crawl') { orient(me.q, P.cdir, ZA); me.p.z -= 0.04; me.bank = 0; me.vel = null;
