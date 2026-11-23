@@ -8,7 +8,7 @@
 export function makeBat(g) {
   const { THREE } = g, group = new THREE.Group(), TAU = Math.PI * 2;
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
-  const DITHER = `float ditherHash(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }`;
+  const DITHER = `float ditherHash(vec2 p){ return ihash21(floor(p)); }`; // a whole-number hash of the pixel: the same on every chip
   const vis = { value: 0 };
 
   // ---- body: furry body, head, big ears, snout, little eyes, legs (one vertex-colored mesh)
@@ -27,7 +27,7 @@ export function makeBat(g) {
   const bodyGeo = g.geoParts(parts);
   const bodyFrag = `uniform float uVis; ${DITHER}
     void main(){ if(ditherHash(gl_FragCoord.xy)>uVis) discard; vec3 n=NORMAL;
-      float fuzz=0.85+0.15*fract(sin(dot(floor(vL*70.0),vec3(12.9,78.2,37.7)))*43758.5);
+      float fuzz=0.85+0.15*ihash31(floor(vL*70.0));
       vec3 c=shade(vC*fuzz,n,vW,0.05,0.4); vec3 V=normalize(uCam-vW); c+=vC*uSunC*0.25*pow(1.0-abs(dot(n,V)),3.0);
       gl_FragColor=vec4(finish(c,vW),1.0); }`;
 

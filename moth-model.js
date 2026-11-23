@@ -8,7 +8,7 @@
 export function makeMoths(g, count) {
   const { THREE } = g, group = new THREE.Group(), items = [], TAU = Math.PI * 2;
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
-  const DITHER = `float ditherHash(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }`;
+  const DITHER = `float ditherHash(vec2 p){ return ihash21(floor(p)); }`; // a whole-number hash of the pixel: the same on every chip
 
   // ---- body: thorax, head, eyes, abdomen with soft bands, legs, antennae (one vertex-colored mesh)
   const CREAM = [0.76, 0.70, 0.61], DOVE = [0.54, 0.51, 0.49], PINK = [0.84, 0.56, 0.58], DARK = [0.06, 0.05, 0.06], LEG = [0.55, 0.50, 0.46];
@@ -34,7 +34,7 @@ export function makeMoths(g, count) {
   const bodyGeo = g.geoParts(bodyParts);
   const bodyFrag = `uniform float uVis; ${DITHER}
     void main(){ if(ditherHash(gl_FragCoord.xy)>uVis) discard; vec3 n=NORMAL;
-      float fuzz=0.88+0.12*fract(sin(dot(floor(vL*90.0),vec3(12.9,78.2,37.7)))*43758.5);   // fine fur grain
+      float fuzz=0.88+0.12*ihash31(floor(vL*90.0));   // fine fur grain
       vec3 c=shade(vC*fuzz,n,vW,0.04,0.7);
       vec3 V=normalize(uCam-vW); c+=vC*uSunC*0.2*pow(1.0-abs(dot(n,V)),3.0);           // soft fur rim in the moonlight
       gl_FragColor=vec4(finish(c,vW),1.0); }`;

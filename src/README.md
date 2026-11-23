@@ -7,7 +7,7 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 |---|---|
 | `core.js` | Small helpers used everywhere: vector names, random, clamp, lerp. |
 | `world.js` | The map: world sizes, where every landmark stands, and the shape of the ground. |
-| `engine.js` | The look: renderer, shaders, shapes, particles, sun shadows, the glow pass and auto resolution. |
+| `engine.js` | The look: renderer, shaders, shapes, particles, sun shadows, the glow pass and auto resolution. `HASH` holds the only random-looking numbers that shaders may use (the same on every chip, TST-014). |
 | `day.js` | The sky, the day from afternoon to dusk, and the day card. |
 | `hive.js` | The hive: the tree shell, the combs, the birth cell and the door. |
 | `bees.js` | The sisters: bodies, hive bees, foragers, the dance, escorts and the bee ball. |
@@ -23,7 +23,7 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `progress.js` | Honey, unlocks, saving, the HUD and messages. |
 | `zones.js` | Scent stones and the places they open. |
 | `trails.js` | Nectar trails that drift through the world. |
-| `audio.js` | Sound: the audio graph, tones, noise and sweeps. |
+| `audio.js` | Sound: the audio graph, tones, noise and sweeps. `sndRnd` is the sound's own random numbers: sound code must not use `Math.random` or `rnd` (TST-013). |
 | `loop.js` | The frame loop and the big update that flies the bee. |
 | `debug.js` | `window.__g`: the handles that tests and tools use. |
 | `gaps.js` | Tight spots: small natural openings to fly through, their chime and their lines. |

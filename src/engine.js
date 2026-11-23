@@ -39,6 +39,19 @@ export function untoneJS(y) { y = clamp(y, 0, 0.97); const x = Math.pow(y, 2.2),
 export const untoneHex = h => new THREE.Color(untoneJS((h >> 16 & 255) / 255), untoneJS((h >> 8 & 255) / 255), untoneJS((h & 255) / 255));
 const SHADOW_RES = 2048, SHADOW_HALF = 85;
 
+// Random-looking numbers for the drawing code that come out the same on every machine. The pictures are drawn by software, and its makers of machine code differ from chip to chip:
+// plain * + - / fract floor mix exp sqrt atan give the same bits everywhere, but dot, length, normalize, sin, cos, tan, pow, log and a matrix times a vector do not (tests/chip-probe.js shows it).
+// A hash turns the smallest difference into another number, so a hash must be made of the first kind only, and must be fed with values that are exact on every machine:
+// whole numbers, uniforms, flat varyings, and * or + of those. Never a smooth varying (use flat), and never sin(x)*43758.5.
+// hash21 is the game's old formula with its dot written out, so it gives the numbers it always gave. ihash11/21/31 hash the bits with whole-number math.
+export const HASH = `
+float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=p.x*(p.x+45.32)+p.y*(p.y+45.32); return fract(p.x*p.y); }
+highp uint hu(highp uint x){ x^=x>>16; x*=0x7feb352dU; x^=x>>15; x*=0x846ca68bU; x^=x>>16; return x; }
+highp uint fbit(float x){ return x==0.0 ? 0u : floatBitsToUint(x); }
+float h01(highp uint x){ return float(x>>8)*5.9604644775390625e-8; }
+float ihash11(float a){ return h01(hu(fbit(a)+0x68bc21ebU)); }
+float ihash21(vec2 p){ return h01(hu(fbit(p.x)^hu(fbit(p.y)+0x9e3779b9U))); }
+float ihash31(vec3 p){ return h01(hu(fbit(p.x)^hu((fbit(p.y)^hu(fbit(p.z)+0x85ebca6bU))+0x9e3779b9U))); }`;
 export let U, MP, COMMON;
 let shadowRT;
 export function setupShaders() {
@@ -61,7 +74,7 @@ export function setupShaders() {
   COMMON = `
 uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC; uniform vec4 uAura; uniform vec3 uAuraC; uniform vec4 uStorm; uniform vec3 uStorm2;
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;
-float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+${HASH}
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
   return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x), mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),f.x), f.y); }
 float fbm(vec2 p){ float a=.5,s=0.; for(int i=0;i<4;i++){ s+=a*vnoise(p); p=p*2.03+7.1; a*=.5; } return s; }
@@ -270,7 +283,8 @@ export function setupPost() {
     void main(){ vec2 t=uTex*uR; vec3 s=texture2D(tSrc,vUv+vec2(-t.x,-t.y)).rgb+texture2D(tSrc,vUv+vec2(t.x,-t.y)).rgb+texture2D(tSrc,vUv+vec2(-t.x,t.y)).rgb+texture2D(tSrc,vUv+vec2(t.x,t.y)).rgb;
       s=s*0.25*0.5+texture2D(tSrc,vUv).rgb*0.5;
       gl_FragColor=vec4(s+texture2D(tAdd,vUv).rgb,1.0); }`, { tSrc: { value: null }, tAdd: { value: null }, uTex: { value: new THREE.Vector2() }, uR: { value: 1 } });
-    const finalM = pm(`uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform float uExpo; uniform float uTime; uniform float uWarm; uniform float uRunWarm; varying vec2 vUv;
+    const finalM = pm(HASH + `
+uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform float uExpo; uniform float uTime; uniform float uWarm; uniform float uRunWarm; varying vec2 vUv;
     vec3 aces(vec3 c){ return (c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14); }
     void main(){
       vec3 c=texture2D(tScene,vUv).rgb; vec3 b=texture2D(tBloom,vUv).rgb;
@@ -287,7 +301,7 @@ export function setupPost() {
       c=clamp(aces(max(c,0.0)),0.0,1.0);
       c=pow(c,vec3(0.4545));
       c=c*0.985+0.01*vec3(1.0,0.88,0.7)*(1.0-c); // lifted, creamy blacks
-      float n=fract(sin(dot(vUv*vec2(913.1,577.7)+fract(uTime)*17.0,vec2(12.9898,78.233)))*43758.5453);
+      float n=ihash31(vec3(floor(gl_FragCoord.xy),uTime)); // the grain: a whole-number hash of the pixel and the time, the same on every chip
       c+=(n-0.5)/255.0*1.5;
       gl_FragColor=vec4(c,1.0); }`, { tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.22 }, uExpo: { value: 1.0 }, uTime: U.uTime, uWarm: { value: 1 }, uRunWarm: U.uRunWarm });
     function pass(m, target) { quad.material = m; renderer.setRenderTarget(target); renderer.render(qs, quadCam); }

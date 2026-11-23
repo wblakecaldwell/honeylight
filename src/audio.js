@@ -2,6 +2,9 @@
 
 // ---------- audio ----------
 export const A = { ctx: null };
+// The sound has its own random numbers. It must take none from the game's stream: a sound device can be missing, and its rate differs from machine to machine,
+// so a draw from the game's stream here would give every machine a different game.
+let sndSeed = 0x2f6e2b1; export const sndRnd = (a = 1, b) => { sndSeed = (sndSeed * 1664525 + 1013904223) >>> 0; const v = sndSeed / 4294967296; return b === undefined ? v * a : a + v * (b - a); };
 export function initAudio() {
   if (A.ctx) return; const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
   try {
@@ -21,7 +24,7 @@ export function initAudio() {
     const blp = c.createBiquadFilter(); blp.type = 'lowpass'; blp.frequency.value = 900; A.buzzG = c.createGain(); A.buzzG.gain.value = 0; const b2g = c.createGain(); b2g.gain.value = 0.3;
     A.buzz.connect(blp); b2.connect(b2g); b2g.connect(blp); blp.connect(A.buzzG); A.buzzG.connect(A.master); A.buzz.start(); b2.start();
     // noise
-    const nb = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; A.noise = nb;
+    const nb = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = sndRnd() * 2 - 1; A.noise = nb;
     const ws = c.createBufferSource(); ws.buffer = nb; ws.loop = true; const wf = c.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 420; wf.Q.value = 0.5; A.windG = c.createGain(); A.windG.gain.value = 0; ws.connect(wf); wf.connect(A.windG); A.windG.connect(A.master); ws.start();
   } catch (e) { A.ctx = null; }
 }
@@ -33,7 +36,7 @@ export function tone(f, vol = 0.12, dur = 1.6, type = 'sine', when = 0) {
 export const SCALE = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.5];
 export function noiseHit(freq, q, vol, dur, type = 'bandpass', sweepTo) {
   if (!A.ctx) return; const c = A.ctx, t = c.currentTime, s = c.createBufferSource(); s.buffer = A.noise; const f = c.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + dur); f.Q.value = q;
-  const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); s.connect(f); f.connect(g); g.connect(A.master); s.start(t, Math.random()); s.stop(t + dur + 0.05);
+  const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); s.connect(f); f.connect(g); g.connect(A.master); s.start(t, sndRnd()); s.stop(t + dur + 0.05);
 }
 export function sweep(f0, f1, dur, vol, type = 'sine') { if (!A.ctx) return; const c = A.ctx, t = c.currentTime, o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(A.master); o.start(t); o.stop(t + dur + 0.05); }
 export const setG = (p, v, tc = 0.15) => { if (A.ctx) p.setTargetAtTime(v, A.ctx.currentTime, tc); };

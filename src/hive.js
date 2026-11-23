@@ -2,7 +2,7 @@
 import * as THREE from '../three.module.min.js';
 import { V3, rnd, lerp, smooth, TAU } from './core.js';
 import { CELL, CT, HTOP, RIN, ROUT, TR, TY, GY } from './world.js';
-import { scene, UNTONE, untoneJS, untoneHex, U, MP, mat } from './engine.js';
+import { scene, UNTONE, untoneJS, untoneHex, U, MP, HASH, mat } from './engine.js';
 
 export let COMBS, BIRTH;
 export function setupCombLayout() {
@@ -170,8 +170,9 @@ export function setupBirthCell() {
       const sh = rnd(0.8, 1.05);
       const m = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: { uS: { value: sh }, uO: { value: new THREE.Vector2(cx, cy) } }, side: THREE.DoubleSide,
         vertexShader: 'varying vec2 vP; uniform vec2 uO; void main(){ vP=position.xy+uO; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-        fragmentShader: UNTONE + `varying vec2 vP; uniform float uS; float h(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
-        float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
+        fragmentShader: UNTONE + HASH + `
+varying vec2 vP; uniform float uS;
+        float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x), mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),f.x), f.y); }
         void main(){ float t=n(vP*9.0)*0.6+n(vP*26.0)*0.4; float glow=1.0-smoothstep(0.0,0.6,length(vP));
           vec3 c=mix(vec3(0.34,0.17,0.04),vec3(0.98,0.70,0.26),t*0.55+glow*0.5)*uS; if(!gl_FrontFacing) c*=vec3(0.9,0.75,0.5); gl_FragColor=vec4(untone(c)*(1.0+0.6*glow),1.0); }` }));
       m.userData = { home: new V3(cx, cy, 0.012), ring, vel: new V3(), spin: new V3(), life: 0, on: true };

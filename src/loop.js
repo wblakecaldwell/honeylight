@@ -18,7 +18,7 @@ import { updateRich, richSip, summitForces, giantSip, dwellSip } from './nectar.
 import { G, gainHoney, addPollen, updateHud } from './progress.js';
 import { zoneLocked, updateZones } from './zones.js';
 import { updateTrails } from './trails.js';
-import { A, tone, SCALE, noiseHit, sweep, setG } from './audio.js';
+import { A, tone, SCALE, noiseHit, sweep, setG, sndRnd } from './audio.js';
 import { GW, gapsInput, gapsStep, gapsFrame } from './gaps.js';
 import { runFrame } from './longrun.js';
 import { waterwayFrame } from './waterway.js';
@@ -179,7 +179,7 @@ export function update(dt) {
     A.rich.forEach((r, i) => setG(r.g.gain, r.v * clamp(combUniforms.uHoney.value * 6 - i * 0.6 + pulse, 0, 1), 0.6));
     const flying = P.mode === 'fly' && !GW.still, rev = GW.rev * GW.rev; setG(A.buzzG.gain, flying ? (0.012 + thrust * 0.03 + Math.min(0.02, spd * 0.001)) * (1 + rev * 1.6) : 0, rev > 0 ? 0.03 : 0.12); setG(A.buzz.frequency, 185 + spd * 2.5 + thrust * 18 - P.pollen * 4 - P.wet * 25 + rev * 90, rev > 0 ? 0.03 : 0.1); setG(A.buzz2.frequency, 2 * (185 + spd * 2.5 + thrust * 18 - P.pollen * 4 + rev * 90), rev > 0 ? 0.03 : 0.1);
     setG(A.windG.gain, outF * (0.035 + Math.min(0.06, spd * 0.003) + 0.05 * WIND.s) * (P.mode === 'gulp' ? 0.2 : 1), 0.4);
-    birdT -= dt; if (birdT < 0 && outF > 0.5 && P.mode === 'fly' && !(window.NIGHT && NIGHT.active)) { birdT = rnd(3, 9); const b = rnd(2200, 3600), n = 2 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) setTimeout(() => sweep(b * rnd(0.9, 1.1), b * rnd(1.15, 1.5), 0.09, 0.018), i * rnd(110, 160)); }
+    birdT -= dt; if (birdT < 0 && outF > 0.5 && P.mode === 'fly' && !(window.NIGHT && NIGHT.active)) { birdT = sndRnd(3, 9); const b = sndRnd(2200, 3600), n = 2 + (sndRnd() * 4 | 0); for (let i = 0; i < n; i++) setTimeout(() => sweep(b * sndRnd(0.9, 1.1), b * sndRnd(1.15, 1.5), 0.09, 0.018), i * sndRnd(110, 160)); }
   }
 }
 

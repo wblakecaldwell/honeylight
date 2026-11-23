@@ -96,6 +96,10 @@ Every feature comes with these, in the same change:
 3. **Screenshots.** Fixed camera spots for the new look in `tests/shots-name.js` (`run.js` loads every `shots-*.js`). Make the new goldens
    with `--update` only for the new spots. Every existing golden must still match pixel for pixel.
 4. **Switch-off run.** The game must pass its day tests with the feature switched off.
+5. **Any machine.** The tests must give the same verdict on every machine (TST-010 to TST-015). Sound code takes its random numbers
+   from `sndRnd` (`src/audio.js`), never from `Math.random` or `rnd`. A shader makes random-looking numbers only with `HASH` from
+   `src/engine.js`, fed with whole numbers, uniforms, flat varyings and `*` or `+` of those. `tests/README.md` tells how the runner
+   compares screenshots on another kind of chip.
 
 Then run, from the game folder:
 

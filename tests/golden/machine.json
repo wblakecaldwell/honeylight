@@ -1,0 +1,6 @@
+{
+ "note": "The machine that made the reference images in this folder, and the checksums of its drawing math (harness.js machine()). The runner compares pixel for pixel on a machine with the same checksums, and \"same to the eye\" on any other.",
+ "made": "linux x64, Chromium 153.0.8010.12, SwiftShader (Subzero)",
+ "exact": "5e7e18f5",
+ "chip": "85e6a9d5"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "honeylight",
+  "private": true,
+  "description": "Honeylight, a bee game. The game itself needs no build and no packages: this file only names what the tests need.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/run.js",
+    "test:night-off": "node tests/run.js \"--query=?night=0\" --skip=NGT,shot:night-"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -3,7 +3,7 @@ import * as THREE from '../three.module.min.js';
 import { M4, Q4, V3, rnd, clamp, lerp, smooth, TAU } from './core.js';
 import { ROUT, POND, WY, FDIR, FIELD_D, srnd, HEDGE_R, ORCH, HILLS, BROOK, HOLLOW, brookD, hollowRootD, terrainH, LOG,
   orchTrees, FOREST, forestTrees, PADS0, overWater } from './world.js';
-import { scene, U, MP, SWAYGLSL, VERT, mat, simple } from './engine.js';
+import { scene, U, MP, SWAYGLSL, VERT, mat, simple, HASH } from './engine.js';
 import { barkMat, trunkGeo } from './hive.js';
 import { YA } from './bees.js';
 import { P, PR } from './player.js';
@@ -15,13 +15,13 @@ export const flowers = []; // filled later; foragers reference it lazily
 
 // ---------- model pass: crowns built from leaf sprays, with real limbs ----------
 const CARD_VERT = `attribute vec3 aN; attribute float aTint; uniform float uTime; uniform vec3 uWind;
-varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying vec3 vBN; varying float vTint;
+varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying vec3 vBN; flat varying float vTint; // flat: vTint feeds a hash, and a smooth varying is rounded differently from chip to chip
 void main(){ mat4 m=modelMatrix*instanceMatrix; vec4 w=m*vec4(position,1.0); float sc=length(m[0].xyz);
   float ph=dot(w.xz,vec2(0.071,0.053))+aTint*31.0; float s=sin(uTime*1.6+ph)+0.5*sin(uTime*2.7+ph*1.7);
   w.xyz+=(vec3(uWind.x,0.0,uWind.y)*(0.3+uWind.z)*0.05+aN*0.03*s+vec3(0.0,0.02*s,0.0))*sc*(0.4+uv.y);
   vW=w.xyz; vL=position; vN=normalize(mat3(m)*normal); vUv=uv; vC=vec3(1.0); vBN=aN; vTint=aTint;
   gl_Position=projectionMatrix*viewMatrix*w; }`;
-const cardMat = (ta, tb, blos) => mat(`varying vec3 vBN; varying float vTint;
+const cardMat = (ta, tb, blos) => mat(`varying vec3 vBN; flat varying float vTint;
 void main(){ vec2 p=vUv*2.0-1.0; float fat=1.0+0.7*smoothstep(50.0,220.0,length(uCam-vW)); float best=0.0, vein=0.0, hl=0.0, kk=1.0, uu=0.0, isB=0.0; vec2 ax=vec2(1.0,0.0);
   for(int i=0;i<5;i++){ float fi=float(i); float h=hash21(vec2(fi*7.13+1.0,vTint*91.7));
     float a=fi*1.2566+h*0.8+vTint*6.2832; vec2 dir=vec2(cos(a),sin(a));
@@ -125,10 +125,10 @@ void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015);
   alb*=0.8+0.32*(1.0-smoothstep(0.0,0.14,abs(vL.x)));
   float dry=smoothstep(0.8,1.0,vH)*step(0.5,vR); alb=mix(alb,vec3(0.52,0.44,0.20),dry*0.7);
   alb=mix(alb,vec3(0.50,0.42,0.22)*(0.75+0.5*vnoise(vec2(vL.x*9.0,vH*60.0))),vSeed*smoothstep(0.5,0.6,vH));
-  gl_FragColor=vec4(finish(shade(alb,n,vW,0.3*vH,0.9),vW),1.0); }`, { side: THREE.DoubleSide, vert: `
+  gl_FragColor=vec4(finish(shade(alb,n,vW,0.3*vH,0.9),vW),1.0); }`, { side: THREE.DoubleSide, vert: HASH + `
 attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; uniform vec4 uWake; uniform vec4 uWakeD; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT; varying float vSeed; varying float vR;
 void main(){ float bi=position.z, y=position.y, sd=position.x;
-  float r1=fract(sin(aPar.z*12.9898+bi*78.233)*43758.5453), r2=fract(r1*91.7+bi*0.37);
+  float r1=ihash21(vec2(aPar.z,bi)), r2=fract(r1*91.7+bi*0.37);
   float seed=step(bi,0.5)*step(fract(aPar.z*3.71),0.07);
   float h=aPar.x*(0.65+0.45*r1)*(1.0+0.35*seed);
   float ang=aPar.y+bi*2.2+r2*0.8, c=cos(ang), s=sin(ang);

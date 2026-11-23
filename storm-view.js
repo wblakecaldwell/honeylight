@@ -66,7 +66,7 @@ export function makeStorm(g) {
         vec3 p=vec3(xz.x, mix(${CY0.toFixed(1)},${CY1.toFixed(1)},up), xz.y); vW=p; ${VZERO} vQ=vec2(u, p.y); vBack=back;
         gl_Position=projectionMatrix*viewMatrix*vec4(p,1.0); }`;
     const frag = `uniform float uK; uniform float uT; uniform float uFlash; uniform vec2 uA; varying vec2 vQ; varying float vBack;
-      float h1(float n){ return fract(sin(n)*43758.5453); }
+      float h1(float n){ return ihash11(n); }
       float streaks(vec2 q){ float x=q.x*0.55; float i=floor(x), f=fract(x); float a=h1(i), b=h1(i+1.0); float col=mix(a,b,smoothstep(0.0,1.0,f));
         float fall=fract(q.y*0.012+uT*0.35+col*3.0); return 0.45+0.55*col*(0.55+0.45*sin(fall*6.2831)); }
       void main(){ float top=smoothstep(${CY1.toFixed(1)},${(CY1 - 55).toFixed(1)},vQ.y), ends=smoothstep(750.0,560.0,abs(vQ.x));

@@ -26,6 +26,9 @@ Honeylight is a browser game: one short life as a honeybee. Plain JavaScript mod
   `node tests/run.js "--query=?night=0" --skip=NGT,shot:night-`. Report the numbers.
 - **Pictures stay pixel-exact** unless the change is meant to change the look. Never use `--update` to make a failing screenshot pass;
   find the cause. Use `--update` only for new screenshots or a look change that is the point of the work, and say so.
+- **The tests must run on any machine**, for anyone who downloads the repository (TST-010 to TST-015). Nothing from the machine
+  (sound device, screen, fonts) may reach the game's random numbers: sound code uses `sndRnd`. A shader makes random-looking numbers
+  only with `HASH` from `src/engine.js`, fed with exact values: no `fract(sin(x)*43758.5)`, no smooth varying into a hash. See `tests/README.md`.
 - **No Claude attribution in commits or pull requests**: no "Co-Authored-By: Claude" trailer, no "Generated with" line, no session links.
 - **Never push** to GitHub without the owner's explicit yes for that push. Local commits are fine.
 - **In-game wording stays organic.** Text the player reads uses the bee's world (flowers, sisters, scent, sun, wind),

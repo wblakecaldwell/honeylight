@@ -8,5 +8,8 @@ staging/
 handoff/
 tests/out/
 
+# What "npm install" fetches for the tests
+node_modules/
+
 # Personal Claude notes for this machine
 CLAUDE.local.md
