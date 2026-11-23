@@ -20,6 +20,8 @@ Honeylight is a browser game: one short life as a honeybee. Plain JavaScript mod
 
 ## The owner's standing rules
 
+- **Never name the owner.** In files, comments, requirements and commit messages write "the owner"; in chat say "the user" or "you".
+  Do not use their name. (The LICENSE copyright line and the site address are the only places the name belongs.)
 - **The deterministic tests must pass.** Before you hand work over, run `node tests/run.js --twice` and
   `node tests/run.js "--query=?night=0" --skip=NGT,shot:night-`. Report the numbers.
 - **Pictures stay pixel-exact** unless the change is meant to change the look. Never use `--update` to make a failing screenshot pass;

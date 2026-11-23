@@ -7,3 +7,6 @@ look-previews/
 staging/
 handoff/
 tests/out/
+
+# Personal Claude notes for this machine
+CLAUDE.local.md
