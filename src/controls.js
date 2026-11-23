@@ -57,10 +57,10 @@ export function keysHTML() {
   if (P.mode === 'crawl' || P.mode === 'cell' || P.mode === 'emerge') h += row('W A S D', 'walk the comb') + row('Space', P.wingsReady ? 'take off' : 'take off, once your wings are dry');
   h += row('Mouse', 'look and steer') + row('W', 'fly forward') + row('S', 'slow down, back up') + row('A D', 'drift sideways') + row('Space', 'rise') + row('Shift', 'sink')
     + row('V', G.third ? 'back to bee\'s-eye view' : 'see yourself from behind')
-    + row(G.dart ? 'Q' : 'Q', G.dart ? 'dart: a burst of wing strength' : 'dart, when you grow (30 honey)', !G.dart)
-    + row('E', G.leap ? 'leap: spring straight up' : 'leap, when you grow (65 honey)', !G.leap)
-    + row('F', G.heat > 0 ? 'heat buzz: knock wasps out of the air' : 'heat buzz, after a sip of red clover', !(G.heat > 0))
-    + row('R', G.workers >= 3 ? 'call your sisters to ball a wasp' : `call your sisters (needs 3, you have ${G.workers})`, G.workers < 3)
+    + row('Q', G.dart ? 'dart: a burst of wing strength' : 'when you grow (30 honey)', !G.dart)
+    + row('E', G.leap ? 'leap: spring straight up' : 'when you grow more (65 honey)', !G.leap)
+    + row('F', G.heat > 0 ? 'heat buzz: knock wasps out of the air' : 'after a sip of red clover', !(G.heat > 0))
+    + row('R', G.workers >= 3 ? 'call your sisters to ball a wasp' : `when 3 sisters work with you (you have ${G.workers})`, G.workers < 3)
     + row('Space', 'wriggle free of a web') + row('Tab', 'hold for these notes') + row('Esc', 'rest and free the mouse');
   return h + `</div>${resting ? '<div class="foot">click to fly on</div>' : ''}`;
 }

@@ -32,6 +32,21 @@ module.exports = [
       return r;
     } },
 
+  { id: 'KEY-004-locked-hidden', req: 'KEY-004', name: 'Locked abilities show only the key and what is needed; the name shows once earned',
+    async run(t) {
+      const r = await t.ev(() => { const g = __g, G = g.G; T.fly(150, 30, 40); T.quiet();
+        const save = { dart: G.dart, leap: G.leap, heat: G.heat, workers: G.workers };
+        G.dart = false; G.leap = false; G.heat = 0; G.workers = 0;
+        const d = document.createElement('div'); d.innerHTML = g.keysHTML(); const locked = d.textContent;
+        G.dart = true; G.leap = true; G.heat = 5; G.workers = 3;
+        d.innerHTML = g.keysHTML(); const open = d.textContent;
+        Object.assign(G, save); return { locked, open }; });
+      for (const w of ['dart', 'leap', 'heat buzz', 'call your sisters', 'wasp']) t.check(!r.locked.toLowerCase().includes(w), `locked card does not say "${w}"`);
+      for (const w of ['30 honey', '65 honey', 'red clover', 'you have 0']) t.check(r.locked.includes(w), `locked card says what is needed: "${w}"`);
+      for (const w of ['dart', 'leap', 'heat buzz', 'call your sisters']) t.check(r.open.includes(w), `earned card names "${w}"`);
+      return { locked: r.locked.length, open: r.open.length };
+    } },
+
   { id: 'KEY-005-tip-once', req: 'KEY-005', name: 'A first-time hint shows one time only, also after a reload',
     async run(t) {
       const first = await t.ev(() => { const g = __g, P = g.P; T.fly(150, 30, 40); T.quiet(); P.flownAt = g.time + 0.001; /* 0 would read as never flown */ let seen = false;

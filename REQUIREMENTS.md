@@ -54,7 +54,7 @@ Written in ASD-STE100 Simplified Technical English. Each requirement has an ID. 
 - **KEY-001** The player must always be able to see the keys without the mouse. Hold Tab, or press H, to show the "Field notes" card. Release Tab (or press H again) to hide it. Added 2026-11-22.
 - **KEY-002** When the player presses Esc and the mouse is free, the game shows the same card as a "Resting" screen. A click returns to the game. This click must not do an action (for example, take off).
 - **KEY-003** A small "Tab keys" note stays in the bottom-right corner. It must be faint.
-- **KEY-004** The card shows abilities that are not ready yet in dim text, with what the bee needs (honey, red clover, sisters).
+- **KEY-004** The card shows abilities that are not ready yet in dim text, with what the bee needs (honey, red clover, sisters). Until an ability is ready, the card shows only its key and what the bee needs. Do not show the name of the ability or what it does until the bee has it. Added 2026-11-23.
 - **KEY-005** Show each first-time hint one time only: V after the first flight, V again when the bee first carries pollen, R when a wasp chases and the bee has 3 sisters, F when the bee is hot and a wasp is near, Tab after 45 seconds of flight. The game keeps a record of shown hints in the browser.
 - **KEY-006** The card and hints must match the style of the game. Do not use a menu with buttons.
 

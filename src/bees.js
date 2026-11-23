@@ -290,7 +290,7 @@ export function setupBeeBall() {
 export function callSisters() {
   if (P.mode !== 'fly' || inHive) return;
   if (SWARM.active) return; if (SWARM.cd > 0) { hint(`your sisters are still catching their breath (${Math.ceil(SWARM.cd)}s)`, 2); return; }
-  if (G.workers < 3) { hint('you need at least 3 sisters to call for help', 3); return; }
+  if (G.workers < 3) { hint('not yet: you need at least 3 sisters', 3); return; }
   let best = null, bd = 40; for (const w of wasps) { if (w.gone > 0 || w.p.y < -100 || w.state === 'idle' || w.state === 'balled') continue; const d = w.p.distanceTo(P.pos); if (d < bd) { bd = d; best = w; } }
   [0, 4, 7, 4].forEach((n, k) => tone(SCALE[n] * 0.5, 0.06, 0.5, 'sawtooth', k * 0.12)); sweep(220, 320, 0.6, 0.04, 'sawtooth');
   if (!best) { toast('<b>You buzz for help</b><br><span>but there\'s no wasp close enough</span>', 2.5); SWARM.cd = 4; return; }
