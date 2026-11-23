@@ -36,11 +36,15 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `mossway.js` | The mossy way in the forest: moss, ferns, big roots, root arches, the old stump and the hollow log. |
 | `highbranch.js` | The high branch: the fallen trunk, the boughs under the crowns, and how the run knows the bee is on it. |
 | `runworld.js` | The world answers the long run: the grass bow wave, flowers that spring up along the track, petals, sparks, dew and warmer light. |
+| `rope.js` | Ropes in the air: short chains of points that stream behind a bee (the scarf's ends, the leaf on the cap), with wind, weight and the swing to the outside of a turn. |
+| `wear.js` | What a bee can wear: the seven pieces of the wardrobe, their models, and how they follow the player's bee. |
+| `wardrobe.js` | The wardrobe cell on the comb near the door, its card, and what is earned and worn (saved with the long run). |
 
 Outside `src/`: `night.js` (the night: moon, fireflies, the hollow grove), `moonflowers.js` (the moonflower models), `moths.js` and `moth-model.js` (hawk moths from the second night), and `bat.js` and `bat-model.js` (the bat from the third night) are separate on purpose. So is `runnight.js` (fireflies that fall in round a bee on the long run at night; `?runnight=0` switches it off).
 The storm is separate too: `storm.js` (when and where it rains, what rain does to the bee, the rainbow's foot) and `storm-view.js` (what it looks like: rain, the rain front, lightning, the rainbow). It reaches `src/` only through hooks tagged "storm.js".
 Add `?night=0` to the address to switch the night off (moths and bat too); `?moths=0` and `?bat=0` switch off only those. `?storm=0` (or `#storm-off`) switches off the storm, and `#storm-now` starts one soon after you fly out. `index.html` loads `main.js`, the night, the storm and the try-out menu.
 The try-out menu is `stage-menu.js` (a play-test tool: a list that jumps to a stage, a checkbox that opens all zones). It is hidden unless the address has `#menu-on` (or `?menu=1`); to leave it out of a release, remove its line from `index.html`.
+The wardrobe has one play-test switch: `?wardrobe=all` (or `#wardrobe-all`) makes all seven pieces earned for that visit (WRD-012).
 
 ## The rules
 

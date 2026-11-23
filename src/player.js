@@ -18,6 +18,7 @@ import { burrowHolds } from './burrow.js';
 import { tone, noiseHit, sweep } from './audio.js';
 import { camPos, inHive, time } from './loop.js';
 import { GW } from './gaps.js';
+import { wardrobeCollide } from './wardrobe.js';
 
 // ---------- first-person body ----------
 export const ants = [];
@@ -76,6 +77,7 @@ export function collide(p, v) {
       const pz = hz - Math.abs(dz), py = p.y - (c.yb - PR), px = c.hw + PR - Math.abs(p.x);
       if (pz <= py && pz <= px) { p.z = c.z + Math.sign(dz || 1) * hz; v.z *= 0.2; } else if (py <= px) { p.y = c.yb - PR; v.y = Math.min(v.y, 0); } else { p.x = Math.sign(p.x) * (c.hw + PR); }
     }
+    wardrobeCollide(p, v); // wardrobe.js: the wardrobe cell stands out of its comb
     return;
   }
   { const dx = p.x - ORCH.x, dz = p.z - ORCH.z, dO = Math.hypot(dx, dz);

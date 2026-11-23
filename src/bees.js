@@ -2,7 +2,7 @@
 import * as THREE from '../three.module.min.js';
 import { M4, Q4, V3, rnd, clamp, lerp, smooth, TAU } from './core.js';
 import { CT, HTOP, RIN, ROUT, TR, TY, FDIR, FIELD_D, DANCE_A, terrainH } from './world.js';
-import { scene, UNTONE, U, VERT, mat, geoParts, ell, stick } from './engine.js';
+import { scene, UNTONE, U, VERT, COMMON, mat, geoParts, ell, stick } from './engine.js';
 import { COMBS, BIRTH } from './hive.js';
 import { flowers } from './plants.js';
 import { P, PR, me } from './player.js';
@@ -15,7 +15,9 @@ import { fwd, inHive, time } from './loop.js';
 
 // ---------- bees ----------
 export let beeMat, wingGeo, wingMat;
-let BEE_VERT, BEE_SEGS, beeGeo, beeMesh, furGeo, FUR_VERT, furMeshes, wingMesh;
+let BEE_VERT, BEE_VERT_C, BEE_SEGS, beeGeo, beeMesh, furGeo, FUR_VERT, furMeshes, wingMesh;
+// make three.js things without taking numbers from the game's random stream (three.js draws a random id for each new thing)
+function quiet(fn) { const game = Math.random; let s = 77171; Math.random = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; try { return fn(); } finally { Math.random = game; } }
 export function setupBeeBodies() {
   BEE_VERT = VERT.replace('void main(){', 'uniform float uTime; attribute vec4 aMove; attribute float aPol; varying float vPol;\nvoid main(){').replace('vec4 w = m*vec4(position,1.0);', `vec3 pp=position; float isLeg=0.0; vPol=0.0;
   #ifdef USE_COLOR
@@ -68,25 +70,42 @@ export function setupBeeBodies() {
   alb*=mix(1.0,0.32,hard); vec3 c=shade(alb,n,vW,0.25+0.5*hard+0.5*isEye,0.25);
   c+=shade(vec3(0.75,0.55,0.25),n,vW,0.0,1.0)*rimv*0.28*(1.0-hard);
   gl_FragColor=vec4(finish(c,vW),1.0); }`, { vertexColors: true, vert: BEE_VERT });
-  beeMesh = new THREE.InstancedMesh(beeGeo, beeMat, MAXB); beeMesh.frustumCulled = false; scene.add(beeMesh);
+  // the wardrobe (wear.js): a bee can wear a coat (aCoat: 1 the orchid bee's green-blue metal, 2 sun gold). A bee with no coat (0) is drawn exactly as before.
+  // The bees' own material carries the coat. beeMat stays as it was: the wasps take their shader text from it. The new things are made with quiet(), so the game's random numbers do not move
+  BEE_VERT_C = BEE_VERT.replace('varying float vPol;', 'varying float vPol; attribute float aCoat; varying float vCoat;').replace('vPol=0.0;', 'vPol=0.0; vCoat=aCoat;');
+  beeGeo.setAttribute('aCoat', new THREE.InstancedBufferAttribute(beeCoat, 1));
+  const coatMat = quiet(() => mat(beeMat.fragmentShader.slice(COMMON.length).replace('varying float vPol; void main(){', 'varying float vPol; varying float vCoat; void main(){')
+    .replace('float lum=dot(alb,vec3(0.33));', `float coatK=step(0.5,vCoat)*(1.0-isEye)*(1.0-step(0.5,vPol)); float fr0=1.0-max(dot(n,V),0.0); float bandC=step(0.2,vC.r);
+  if(coatK>0.5){ if(vCoat<1.5){ float wob=0.14*sin(vL.z*14.0+vL.x*6.0)+0.10*vnoise(vL.xz*9.0);
+      vec3 a=mix(vec3(0.10,0.50,0.07),vec3(0.02,0.42,0.16),smoothstep(0.0,0.3,fr0+wob)); a=mix(a,vec3(0.02,0.24,0.55),smoothstep(0.42,0.88,fr0+wob));
+      a=mix(a,vec3(0.30,0.08,0.50),smoothstep(0.82,1.0,fr0)*0.6); alb=mix(a*(vC.r<0.07?0.42:0.6),a,bandC)*(0.85+0.3*fz); }
+    else { alb=mix(vec3(0.30,0.13,0.02),vec3(1.0,0.60,0.09),bandC); alb=mix(alb,vec3(0.72,0.40,0.05),step(0.075,vC.r)*step(vC.r,0.12)); alb=mix(alb,vec3(0.50,0.26,0.04),step(vC.r,0.055)); alb*=0.85+0.3*fz; } }
+  float lum=dot(alb,vec3(0.33));`)
+    .replace('gl_FragColor=vec4(finish(c,vW),1.0); }', `if(coatK>0.5){ vec3 R=reflect(-V,n); vec3 env=mix(hazeCol(R),vec3(0.9,0.55,0.2),inHive(vW))*mix(0.22,1.0,smoothstep(-0.35,0.35,R.y));
+    vec3 Hh=normalize(normalize(uSun)+V); float sp=pow(max(dot(n,Hh),0.0),42.0)*(1.0-uNight)*(1.0-inHive(vW)); float top=pow(max(dot(n,normalize(vec3(0.25,1.0,0.15))),0.0),5.0);
+    if(vCoat<1.5) c=shade(alb*0.42,n,vW,0.9,0.0)+alb*env*0.6+(alb*1.5+vec3(0.55,0.60,0.12))*sp*1.5+vec3(0.45,0.70,0.22)*top*0.22;
+    else c=shade(alb*0.8,n,vW,0.9,0.2)+alb*env*0.35+(alb+0.3)*sp*0.9+vec3(1.0,0.75,0.3)*top*0.25+vec3(1.0,0.50,0.08)*(0.06+0.40*rimv)*(0.55+0.45*bandC); }
+  gl_FragColor=vec4(finish(c,vW),1.0); }`), { vertexColors: true, vert: BEE_VERT_C }));
+  beeMesh = new THREE.InstancedMesh(beeGeo, coatMat, MAXB); beeMesh.frustumCulled = false; scene.add(beeMesh);
   // ---------- round 7: crisp fur tufts around each bee body (thorax longest) ----------
   furGeo = geoParts([
     { g: ell(0.18, 0.17, 0.19, 0, 0.03, 0.13, 18), c: [0.25, 0.15, 0.05] },
     ...BEE_SEGS.map(([r, zc, dk]) => ({ g: ell(r, r * 0.92, 0.1, 0, -0.012, zc, 16), c: dk ? [0.06, 0.035, 0.02] : [0.70, 0.42, 0.08] }))]);
-  furGeo.setAttribute('aMove', beeGeo.getAttribute('aMove'));
-  FUR_VERT = BEE_VERT.replace('void main(){', 'uniform float uShell;\nvoid main(){').replace('vec3 pp=position;', `vec3 pp=position;
+  furGeo.setAttribute('aMove', beeGeo.getAttribute('aMove')); furGeo.setAttribute('aCoat', beeGeo.getAttribute('aCoat'));
+  FUR_VERT = BEE_VERT_C.replace('void main(){', 'uniform float uShell;\nvoid main(){').replace('vec3 pp=position;', `vec3 pp=position;
   #ifdef USE_COLOR
-  float furL=color.r>0.5?0.55:(color.g>0.1?1.3:0.5); pp+=normal*uShell*furL;
+  float furL=color.r>0.5?0.55:(color.g>0.1?1.3:0.5); if(aCoat>0.5&&aCoat<1.5) furL*=0.45; if(aCoat>1.5) furL*=0.72; pp+=normal*uShell*furL;
   #endif
   `);
   furMeshes = [0.2, 0.4, 0.6, 0.8, 1.0].map(k => {
-    const m = mat(`uniform float uK; void main(){ vec3 n=normalize(vN); vec3 V=normalize(uCam-vW);
+    const m = mat(`uniform float uK; varying float vCoat; void main(){ vec3 n=normalize(vN); vec3 V=normalize(uCam-vW);
     vec3 q=vL*190.0; vec3 id=floor(q); vec3 j=vec3(hash21(id.xy+id.z*3.1),hash21(id.yz+id.x*7.7),hash21(id.zx+id.y*5.3));
     float d=length(fract(q)-0.25-j*0.5); if(d>0.62*(1.0-uK*0.75)) discard;
     vec3 alb= vC.r>0.5 ? vec3(0.86,0.56,0.16) : (vC.g>0.1 ? mix(vec3(0.62,0.42,0.16),vec3(0.9,0.68,0.32),j.x) : vec3(0.08,0.06,0.045));
+    if(vCoat>0.5){ float br=(vC.g>0.1||vC.r>0.5)?1.0:0.45; if(vCoat<1.5){ if(d>0.62*(1.0-uK*0.75)*0.5) discard; alb=mix(vec3(0.02,0.20,0.12),vec3(0.10,0.50,0.38),j.x)*br; } else { if(d>0.62*(1.0-uK*0.75)*0.82) discard; alb=mix(vec3(0.80,0.40,0.03),vec3(1.0,0.66,0.14),j.x)*(br>0.9?1.0:0.25); } }
     alb*=0.5+0.75*uK;
     float rim=pow(1.0-max(dot(n,V),0.0),1.5);
-    vec3 c=shade(alb,n,vW,0.05,1.0)+shade(alb*1.5+0.04,n,vW,0.0,1.0)*rim*0.3*uK;
+    vec3 c=shade(alb,n,vW,0.05,1.0)+shade(alb*1.5+0.04,n,vW,0.0,1.0)*rim*0.3*uK; if(vCoat>1.5) c+=vec3(1.0,0.55,0.10)*uK*((vC.g>0.1||vC.r>0.5)?1.0:0.25)*(0.10+1.3*step(0.93,j.y));
     gl_FragColor=vec4(finish(c,vW),1.0); }`, { vertexColors: true, vert: FUR_VERT, uniforms: { uShell: { value: 0.042 * k }, uK: { value: k } } });
     const fm = new THREE.InstancedMesh(furGeo, m, MAXB); fm.instanceMatrix = beeMesh.instanceMatrix; fm.frustumCulled = false; fm.count = 0; scene.add(fm); return fm; });
 
@@ -102,11 +121,26 @@ export function setupBeeBodies() {
   vec3 mem=shade(vec3(0.82,0.82,0.78),n,vW,1.6,1.0)*0.25+film*(0.12+0.5*f)*0.3*lum;
   vec3 c=mix(mem,shade(vec3(0.10,0.07,0.04),n,vW,0.4,0.2),vein*0.85);
   gl_FragColor=vec4(finish(c,vW),clamp(0.05+0.25*f+vein*0.6,0.0,0.95)); }`, { transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  wingMesh = new THREE.InstancedMesh(wingGeo, wingMat, MAXB * 2); wingMesh.frustumCulled = false; scene.add(wingMesh);
+  // the wardrobe (wear.js): moth dust on a bee's wings (aKit 1): pale scales, an eye ring, a band and glints. A wing with no dust (0) is drawn exactly as before.
+  // The bees get a wing shape and a material of their own for it; wingGeo and wingMat stay as they were for the wasps
+  const [dustGeo, dustMat] = quiet(() => { const g = wingGeo.clone(); g.setAttribute('aKit', new THREE.InstancedBufferAttribute(wingKit, 1));
+    return [g, mat(wingMat.fragmentShader.slice(COMMON.length).replace('void main(){', 'varying float vKit; void main(){')
+      .replace('gl_FragColor=vec4(finish(c,vW),clamp(0.05+0.25*f+vein*0.6,0.0,0.95)); }', `float al=clamp(0.05+0.25*f+vein*0.6,0.0,0.95);
+  if(vKit>0.5){ vec2 q=vec2(p.x,-p.y); float sc=vnoise(q*vec2(70.0,110.0)), edge=smoothstep(0.05,0.56,q.x);
+    vec3 dust=mix(vec3(0.80,0.70,0.52),vec3(0.96,0.92,1.0),vnoise(q*9.0+3.0));
+    float ring=smoothstep(0.035,0.0,abs(length((q-vec2(0.40,0.02))*vec2(1.0,1.5))-0.055)); dust=mix(dust,vec3(0.34,0.20,0.13),ring*0.9); dust=mix(dust,vec3(0.50,0.34,0.22),smoothstep(0.44,0.56,q.x)*0.6);
+    float bandw=smoothstep(0.03,0.0,abs(q.x-0.26-0.03*sin(q.y*40.0))); dust=mix(dust,vec3(0.46,0.32,0.22),bandw*0.7);
+    float cover=clamp((0.62+0.38*edge)*(0.70+0.38*sc),0.0,1.0);
+    c=mix(c,shade(dust,n,vW,0.25,1.0),cover); al=max(al,cover*0.9);
+    vec2 gq=floor(q*170.0); float gl=step(0.982,hash21(gq))*(0.45+0.55*sin(uTime*7.0+hash21(gq+5.0)*40.0));
+    c+=vec3(2.2,1.9,1.4)*gl*2.2; al=max(al,gl); }
+  gl_FragColor=vec4(finish(c,vW),al); }`), { transparent: true, depthWrite: false, side: THREE.DoubleSide, vert: VERT.replace('void main(){', 'attribute float aKit; varying float vKit;\nvoid main(){ vKit=aKit;') })]; });
+  wingMesh = new THREE.InstancedMesh(dustGeo, dustMat, MAXB * 2); wingMesh.frustumCulled = false; scene.add(wingMesh);
 }
 
 const MAXB = 300; const beeMove = new Float32Array(MAXB * 4);
 const beePol = new Float32Array(MAXB);
+const beeCoat = new Float32Array(MAXB), wingKit = new Float32Array(MAXB * 2); // wear.js: a coat for each bee (b.coat) and a wing kit for each wing (b.wing); 0 = none
 export const bees = [];
 export function newBee(scale = 1) { const b = { p: new V3(), q: new Q4(), s: new V3(scale, scale, scale), fly: false, ph: rnd(TAU), update: null }; bees.push(b); return b; }
 export const _x = new V3(), _y = new V3(), _z = new V3(), _m = new M4(), _m2 = new M4(), _q = new Q4(), _v = new V3(), _v2 = new V3();
@@ -117,6 +151,17 @@ function setOnFace(b, ci, side, x, y, th, dip = 0) {
   _v.set(Math.cos(th), Math.sin(th), 0); _v2.set(0, 0, side); orient(b.q, _v, _v2);
   if (dip) b.q.multiply(_q.setFromAxisAngle(XA, dip * 0.5));
 }
+// wardrobe.js: places on a comb face where the sisters do not walk, because a wide cell stands there. Each is { ci, side, x, y, r, pole, soft }:
+// the disc of radius r at (x, y) and the strip under it. A walker's own path does not change. It is drawn pushed out of the place, up and round it,
+// along the line from a point under the place (pole below its middle) through the walker; walkers up to `soft` outside make room.
+// With no such place every sister is drawn exactly where she walks
+export const KEEPOFF = [];
+const _ko = [0, 0];
+function keepOff(ci, side, x, y) {
+  for (const k of KEEPOFF) { if (k.ci !== ci || k.side !== side) continue; const px = x - k.x, py = y - (k.y - k.pole), d = Math.hypot(px, py); if (py <= 0.05) continue;
+    const c = px / d, s = py / d, t1 = k.r / Math.max(Math.abs(c), 1e-4), rho = t1 * s <= k.pole ? t1 : k.pole * s + Math.sqrt(Math.max(0, k.pole * k.pole * (s * s - 1) + k.r * k.r)), far = rho + k.soft;
+    if (d < far) { const d2 = rho + k.soft * d / far; x = k.x + c * d2; y = k.y - k.pole + s * d2; } }
+  _ko[0] = x; _ko[1] = y; return _ko; }
 function makeWalker(ci, side, o = {}) {
   const c = COMBS[ci], b = newBee(o.scale || rnd(0.9, 1.05));
   b.x = o.x ?? rnd(-c.hw + 0.6, c.hw - 0.6); b.y = o.y ?? rnd(c.yb + 0.8, HTOP - 0.6); b.th = rnd(TAU); b.pause = rnd(2); b.dip = 0; b.sp = o.sp || rnd(0.35, 0.8);
@@ -129,7 +174,7 @@ function makeWalker(ci, side, o = {}) {
       if (Math.random() < dt * 0.3) b.pause = rnd(0.8, 3.5);
       if (Math.abs(b.x) > c.hw - 0.5 || b.y < c.yb + 0.6 || b.y > HTOP - 0.5) { const t = Math.atan2((c.yb + HTOP) / 2 - b.y, -b.x); let d = t - b.th; d = Math.atan2(Math.sin(d), Math.cos(d)); b.th += d * Math.min(1, dt * 4); }
     }
-    setOnFace(b, ci, side, b.x, b.y, b.th + Math.sin(performance.now() * 0.02 + b.ph) * 0.05, b.dip);
+    const at = keepOff(ci, side, b.x, b.y); setOnFace(b, ci, side, at[0], at[1], b.th + Math.sin(performance.now() * 0.02 + b.ph) * 0.05, b.dip);
   };
   return b;
 }
@@ -203,8 +248,8 @@ export function updateBees(dt, t) {
     if (dt > 0) { if (b.vel) _v.copy(b.vel); else _v.copy(b.p).sub(b.lp).multiplyScalar(1 / dt); b.lp.copy(b.p); _q.copy(b.q).invert(); _v.applyQuaternion(_q);
       b.ax = b.ax === undefined ? 0 : b.ax; const fz = clamp(_v.z * 0.05, -0.8, 1.4); b.mx = lerp(b.mx, fz + (fz - (b.pz || 0)) * 0.0, Math.min(1, dt * 4)); b.pz = fz;
       b.my = lerp(b.my, b.bank !== undefined ? b.bank : clamp(-_v.x * 0.08, -1, 1), Math.min(1, dt * 3)); }
-    beeMove[i * 4] = b.mx; beeMove[i * 4 + 1] = b.my; beeMove[i * 4 + 2] = b.ph * 7; beeMove[i * 4 + 3] = b.fly ? 1 : 0; beePol[i] = b.pol || 0;
-    _bm.compose(b.p, b.q, b.s); beeMesh.setMatrixAt(i, _bm);
+    beeMove[i * 4] = b.mx; beeMove[i * 4 + 1] = b.my; beeMove[i * 4 + 2] = b.ph * 7; beeMove[i * 4 + 3] = b.fly ? 1 : 0; beePol[i] = b.pol || 0; beeCoat[i] = b.coat || 0; wingKit[i * 2] = wingKit[i * 2 + 1] = b.wing || 0;
+    _bm.compose(b.p, b.q, b.s); beeMesh.setMatrixAt(i, _bm); if (b.worn) b.worn(_bm, dt, t); // wear.js: what the bee wears follows its body
     for (let s = 0; s < 2; s++) {
       const sg = s ? -1 : 1;
       const flap = b.fly ? Math.sin(t * 190 + b.ph + i) * 0.85 + 0.15 : 0.03, sweep = b.fly ? 0.25 : 1.25;
@@ -212,7 +257,7 @@ export function updateBees(dt, t) {
       _wm.multiplyMatrices(_bm, _t); wingMesh.setMatrixAt(i * 2 + s, _wm);
     }
   }
-  beeMesh.instanceMatrix.needsUpdate = true; wingMesh.instanceMatrix.needsUpdate = true; beeGeo.attributes.aMove.needsUpdate = true; beeGeo.attributes.aPol.needsUpdate = true;
+  beeMesh.instanceMatrix.needsUpdate = true; wingMesh.instanceMatrix.needsUpdate = true; beeGeo.attributes.aMove.needsUpdate = true; beeGeo.attributes.aPol.needsUpdate = true; beeGeo.attributes.aCoat.needsUpdate = true; wingMesh.geometry.attributes.aKit.needsUpdate = true;
 }
 
 // ---------- dance streak + shimmer trail ----------

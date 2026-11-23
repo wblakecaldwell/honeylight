@@ -3,6 +3,7 @@
 // A bail (off the track, too high, too slow, or a bump) drops one tier and the run goes on. Off the track for more than 2 s ends the run.
 // Five honeycomb cells at the bottom of the screen show the tiers. A coloured light round the bee (uAura) and a chord grow with them.
 // When the whole loop is open, a challenge line shows after 3 s on the track. Challenges come one at a time, in order (saved in honeylight.run).
+// Each challenge won earns one piece of the wardrobe, in the order of wear.js. What the bee has on is saved with the run (wardrobe.js).
 // Self-contained: it draws no numbers from the game's random stream (three.js ids use its own stream while it builds).
 import * as THREE from '../three.module.min.js';
 import { V3, lerp, clamp } from './core.js';
@@ -36,7 +37,7 @@ export const CHALLENGES = [
 ];
 const SAVE_KEY = 'honeylight.run';
 
-export const RUN = { S: [], T: [], zone: [], K: [], own: [], first: { S: [], T: [], keep: [], N: 0 }, N: 0, dewN: 0, state: 'idle', tier: 0, prog: 0, s: 0, s0: 0, offT: 0, clean: false, bails: 0, t: 0, endT: 0, result: '', stopAt: 1e9, open: 0, mem: { ch: 0 }, auto: null, lastSpd: 0, goalShown: false, why: '' };
+export const RUN = { S: [], T: [], zone: [], K: [], own: [], first: { S: [], T: [], keep: [], N: 0 }, N: 0, dewN: 0, state: 'idle', tier: 0, prog: 0, s: 0, s0: 0, offT: 0, clean: false, bails: 0, t: 0, endT: 0, result: '', stopAt: 1e9, open: 0, mem: { ch: 0, best: 0, worn: [], seen: 0 }, auto: null, lastSpd: 0, goalShown: false, why: '' };
 
 // ground under the track: the water top over the pond and the brook, else the ground
 export function groundAt(x, z) {
@@ -196,8 +197,10 @@ function chordUpdate(on) { // a soft held chord, one note per tier
   pad.forEach((g, i) => g.gain.setTargetAtTime(on && RUN.tier > i ? 0.022 : 0, c.currentTime, 0.4)); }
 
 // ---------- saving ----------
-function loadMem() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && typeof s.ch === 'number') RUN.mem = { ch: s.ch, best: s.best || 0 }; } catch (e) { } }
-function saveMem() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(RUN.mem)); } catch (e) { } }
+// ch: how many challenges are won. worn: what the bee has on (ids of wear.js). seen: how many earned pieces the bee has seen at its wardrobe cell.
+// A save from before the wardrobe has only ch and best: its pieces are earned, nothing is worn yet and all of them are new
+function loadMem() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && typeof s.ch === 'number') RUN.mem = { ch: s.ch, best: s.best || 0, worn: Array.isArray(s.worn) ? s.worn.filter(w => typeof w === 'string') : [], seen: typeof s.seen === 'number' ? s.seen : 0 }; } catch (e) { } }
+export function saveMem() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(RUN.mem)); } catch (e) { } }
 
 export function setupLongRun() {
   const gameRandom = Math.random; let ids = 52011; Math.random = () => { ids = (ids * 1664525 + 1013904223) >>> 0; return ids / 4294967296; };
@@ -234,7 +237,7 @@ function endRun(result, quiet = false) {
   if (result === 'done') {
     const r = { third: RUN.third, allThird: RUN.allThird, tierEnd: RUN.tier, bails: RUN.bails, fullPollen: RUN.minPollen >= G.cap && P.pollen >= G.cap, night: RUN.nightStart && !!(window.NIGHT && window.NIGHT.active), high: HIGH.upN > 0 && RUN.hiN >= HIGHK.need * HIGH.upN }; // high: it kept to the high branch (highbranch.js)
     RUN.last = r; const ch = CHALLENGES[RUN.mem.ch];
-    if (ch && ch.ok(r)) { RUN.mem.ch++; saveMem(); msg = `Challenge ${RUN.mem.ch} complete`; tone(SCALE[2], 0.1, 2.4); tone(SCALE[4], 0.08, 2.4, 'sine', 0.15); tone(SCALE[7], 0.07, 2.6, 'sine', 0.3); }
+    if (ch && ch.ok(r)) { RUN.mem.ch++; saveMem(); msg = `Challenge ${RUN.mem.ch} complete. Something new is waiting at home.`; /* wardrobe.js: a new piece hangs in the wardrobe cell */ tone(SCALE[2], 0.1, 2.4); tone(SCALE[4], 0.08, 2.4, 'sine', 0.15); tone(SCALE[7], 0.07, 2.6, 'sine', 0.3); }
     else { msg = 'All the way round'; tone(SCALE[4], 0.08, 2); tone(SCALE[7], 0.06, 2.2, 'sine', 0.15); }
   } else if (result === 'stopped') msg = 'The trail is overgrown past here';
   else if (result === 'lost') { msg = 'Off the trail'; sweep(500, 260, 0.5, 0.04); }

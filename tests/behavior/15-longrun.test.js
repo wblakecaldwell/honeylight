@@ -105,7 +105,7 @@ module.exports = [
         return out; }, [allOpen, ride]);
       t.eq(r.before, false, 'not before 3 s'); t.eq(r.text1, 'Challenge 1: Finish the loop in bee’s-eye view', 'the first challenge'); t.eq(r.shown, '1', 'it shows');
       t.eq(r.thirdRun, ['done', 0], 'a loop in follow view does not win challenge 1');
-      t.eq(r.fpv, ['done', 1, 'Challenge 1 complete'], 'a loop in the bee’s eyes wins it'); t.eq(r.saved, 1, 'and it is saved');
+      t.eq(r.fpv, ['done', 1, 'Challenge 1 complete. Something new is waiting at home.'], 'a loop in the bee’s eyes wins it'); t.eq(r.saved, 1, 'and it is saved');
       t.eq(r.text2, 'Challenge 2: Finish the loop while still glowing', 'the next one shows on the next run');
       t.eq(r.second, ['done', 2], 'the glowing finish wins challenge 2 only (one per run), though the run also had no bail and was in the bee’s eyes');
       return r;

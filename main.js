@@ -29,6 +29,8 @@ import * as waterway from './src/waterway.js';
 import * as mossway from './src/mossway.js';
 import * as highbranch from './src/highbranch.js';
 import * as runworld from './src/runworld.js';
+import * as wear from './src/wear.js';
+import * as wardrobe from './src/wardrobe.js';
 
 engine.setupColorSpace();
 world.setupLandmarks();
@@ -111,3 +113,5 @@ waterway.setupWaterway();
 mossway.setupMossway();
 highbranch.setupHighBranch();
 runworld.setupRunWorld();
+wear.setupWear();
+wardrobe.setupWardrobe();

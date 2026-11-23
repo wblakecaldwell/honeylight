@@ -129,7 +129,7 @@ module.exports = [
       t.eq([r.result, r.bails], ['done', 0], 'all the way round, no bail (bails: ' + JSON.stringify(r.log || []) + ')'); t.eq(r.tier, 5, 'at the top tier at the end');
       t.eq(r.last.high, true, 'the run went by the high branch'); t.check(r.hiN >= 0.85 * r.upN, 'it kept to it: ' + r.hiN + ' of ' + r.upN);
       t.check(r.upMax > 17, 'the bee was high over the forest floor and still in the zone: ' + r.upMax.toFixed(1));
-      t.eq([r.ch, r.text, r.saved], [3, 'Challenge 3 complete', 3], 'challenge 3 is won and saved'); t.check(r.secs > 40 && r.secs < 85, 'in about a minute: ' + r.secs);
+      t.eq([r.ch, r.text, r.saved], [3, 'Challenge 3 complete. Something new is waiting at home.', 3], 'challenge 3 is won and saved'); t.check(r.secs > 40 && r.secs < 85, 'in about a minute: ' + r.secs);
       return { secs: r.secs, hiN: r.hiN, upN: r.upN, upMax: r.upMax };
     } },
 

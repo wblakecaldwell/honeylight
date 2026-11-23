@@ -23,6 +23,7 @@ import { GW, gapsInput, gapsStep, gapsFrame } from './gaps.js';
 import { runFrame } from './longrun.js';
 import { waterwayFrame } from './waterway.js';
 import { updateRunWorld } from './runworld.js';
+import { wardrobeWalk, updateWardrobe } from './wardrobe.js';
 
 // ---------- main loop ----------
 export const fwd = new V3(), right = new V3(), acc = new V3(), tmp = new V3(), camPos = new V3();
@@ -66,7 +67,7 @@ export function update(dt) {
     const c = COMBS[BIRTH.ci];
     tmp.set(-Math.sin(P.ch || 0), Math.cos(P.ch || 0), 0); _v.set(tmp.y, -tmp.x, 0);
     const sp = 1.7; P.pos.x += (tmp.x * kf + _v.x * ks) * sp * dt; P.pos.y += (tmp.y * kf + _v.y * ks) * sp * dt;
-    P.pos.x = clamp(P.pos.x, -c.hw + 0.3, c.hw - 0.3); P.pos.y = clamp(P.pos.y, c.yb + 0.4, HTOP - 0.5); P.pos.z = c.z + CT / 2 + 0.24; P.cdir.copy(tmp);
+    P.pos.x = clamp(P.pos.x, -c.hw + 0.3, c.hw - 0.3); P.pos.y = clamp(P.pos.y, c.yb + 0.4, HTOP - 0.5); P.pos.z = c.z + CT / 2 + 0.24; wardrobeWalk(P.pos); /* wardrobe.js: the bee walks round the wardrobe cell */ P.cdir.copy(tmp);
     if (kf || ks) bob += dt * 11;
     P.wad = lerp(P.wad || 0, kf || ks ? 1 : 0, Math.min(1, dt * 7)); P.wadPh = bob; // player.js: the waddle, seen from outside
     // the sister's greeting
@@ -162,6 +163,7 @@ export function update(dt) {
   runFrame(dt); // longrun.js: the long run round the map
   updateRunWorld(dt); // runworld.js: the grass, flowers, petals and dew answer a bee in the zone
   waterwayFrame(dt); // waterway.js: the little waterfall wets a bee that flies through it
+  updateWardrobe(dt); // wardrobe.js: the card at the wardrobe cell
   updateWind(dt); updateAirLife(dt); updateRescueShadowAndWaspSound(dt); updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateForagingAndHedgeWind(dt); updateParts(dt); updateHud(dt);
 
   // overlays
