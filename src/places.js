@@ -19,17 +19,29 @@ export function setupGround() {
   {
     const g = new THREE.PlaneGeometry(1300, 1300, 150, 150); g.rotateX(-Math.PI / 2); const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) p.setY(i, terrainH(p.getX(i), p.getZ(i))); g.computeVertexNormals();
-    scene.add(new THREE.Mesh(g, mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.035), b=fbm(vW.xz*0.4);
+    groundMesh = new THREE.Mesh(g, mat(`void main(){ vec3 n=NORMAL; float a=fbm(vW.xz*0.035), b=fbm(vW.xz*0.4);
     vec3 alb=mix(vec3(0.06,0.17,0.03),vec3(0.26,0.40,0.07),a)*(0.7+0.6*b);
     alb=mix(alb,vec3(0.30,0.22,0.11),smoothstep(0.55,0.75,fbm(vW.xz*0.09+9.0))*0.5);
     alb=mix(alb,vec3(0.24,0.20,0.12)*(0.6+0.6*b),smoothstep(${(WY + 2.6).toFixed(1)},${(WY + 0.2).toFixed(1)},vW.y));
     alb*=mix(1.0,0.35,smoothstep(${WY.toFixed(1)},${(WY - 5).toFixed(1)},vW.y));${MP ? cloverGLSL() : ''}
-    gl_FragColor=vec4(finish(shade(alb,n,vW,0.0,0.0),vW),1.0); }`)));
+    gl_FragColor=vec4(finish(shade(alb,n,vW,0.0,0.0),vW),1.0); }`)); scene.add(groundMesh);
   }
 }
+// burrow.js: the height of the ground's picture (its coarse mesh of triangles), which is a little off the smooth ground of terrainH
+let groundMesh;
+const GROUND_STEP = 1300 / 150;
+export function groundMeshH(x, z) { const u = (x + 650) / GROUND_STEP, w = (z + 650) / GROUND_STEP, ix = Math.floor(u), iz = Math.floor(w), fu = u - ix, fw = w - iz, x0 = ix * GROUND_STEP - 650, z0 = iz * GROUND_STEP - 650;
+  const ha = terrainH(x0, z0), hb = terrainH(x0, z0 + GROUND_STEP), hc = terrainH(x0 + GROUND_STEP, z0 + GROUND_STEP), hd = terrainH(x0 + GROUND_STEP, z0);
+  return fu + fw <= 1 ? ha + fu * (hd - ha) + fw * (hb - ha) : hc + (1 - fu) * (hb - hc) + (1 - fw) * (hd - hc); }
+// burrow.js: put a test in the ground's shader (a GLSL function "bool groundCut(vec3 p)"); where it is true the ground is not drawn, which makes a hole
+export function cutGround(glsl) { const m = groundMesh.material; m.fragmentShader = m.fragmentShader.replace('void main(){', glsl + '\nvoid main(){ if(groundCut(vW)) discard;'); m.needsUpdate = true; }
 
 // pond
 export const pads = [];
+let padG, padM;
+export let pondReeds = null; // { reeds, heads, n }: the pond's reed stems and their heads (waterway.js takes the ones on the long run's track away)
+// waterway.js: one more lily pad like the pond's own (the bee can land on it); turn is its angle
+export function addPad(x, z, r, turn) { const m = new THREE.Mesh(padG, padM); m.position.set(x, WY + 0.06, z); m.scale.set(r, 1, r); m.rotation.y = turn; m.renderOrder = 3; scene.add(m); const p = { x, z, r, mesh: m, dip: 0 }; pads.push(p); return p; }
 
 export let fish;
 export function setupPond() {
@@ -44,11 +56,11 @@ export function setupPond() {
     c+=vec3(1.2,1.1,0.9)*step(0.992,vnoise(vW.xz*2.2+uTime*0.6))*0.6;
     gl_FragColor=vec4(finish(c,vW),0.72+0.28*fr); }`, { transparent: true, side: THREE.DoubleSide, depthWrite: false }));
     w.rotation.x = -Math.PI / 2; w.position.set(POND.x, WY, POND.z); w.renderOrder = 2; scene.add(w);
-    const padM = mat(`void main(){ vec3 n=NORMAL; float a=atan(vL.z,vL.x); float r=length(vL.xz); if(abs(a)<0.16 && r>0.12) discard;
+    padM = mat(`void main(){ vec3 n=NORMAL; float a=atan(vL.z,vL.x); float r=length(vL.xz); if(abs(a)<0.16 && r>0.12) discard;
     float veins=pow(abs(sin(a*9.0)),14.0)*smoothstep(0.1,0.9,r);
     vec3 alb=mix(vec3(0.07,0.26,0.05),vec3(0.20,0.42,0.08),veins+0.3*vnoise(vL.xz*5.0)); alb=mix(alb,vec3(0.30,0.20,0.06),smoothstep(0.9,1.0,r)*0.6);
     gl_FragColor=vec4(finish(shade(alb,n,vW,0.9,0.4),vW),1.0); }`, { side: THREE.DoubleSide });
-    const padG = new THREE.CylinderGeometry(1, 1, 0.08, 36);
+    padG = new THREE.CylinderGeometry(1, 1, 0.08, 36);
     let guard = 0; for (const p0 of PADS0) { const x = p0.x, z = p0.z;
       const r = p0.r, m = new THREE.Mesh(padG, padM); m.position.set(x, WY + 0.06, z); m.scale.set(r, 1, r); m.rotation.y = rnd(TAU); m.renderOrder = 3; scene.add(m); pads.push({ x, z, r, mesh: m, dip: 0 }); }
     // reeds
@@ -57,7 +69,7 @@ export function setupPond() {
     while (n < N && guard++ < 6000) { const a = rnd(TAU), d = POND.r + rnd(-22, 22), x = POND.x + Math.cos(a) * d, z = POND.z + Math.sin(a) * d, h = terrainH(x, z); if (h > WY + 1.2 || h < WY - 1.5) continue; if (Math.sin(a * 5) < -0.2) continue;
       const H = rnd(12, 24); q.setFromEuler(new THREE.Euler(rnd(-0.08, 0.08), 0, rnd(-0.08, 0.08))); m.compose(new V3(x, h - 0.3, z), q, new V3(1.3, H, 1.3)); reeds.setMatrixAt(n, m);
       m.compose(new V3(x, h - 0.3 + H * 0.93, z), q, new V3(0.5, 2.2, 0.5)); heads.setMatrixAt(n, m); n++; }
-    reeds.count = heads.count = n; reeds.frustumCulled = heads.frustumCulled = false; scene.add(reeds, heads);
+    reeds.count = heads.count = n; reeds.frustumCulled = heads.frustumCulled = false; scene.add(reeds, heads); pondReeds = { reeds, heads, n };
   }
   // the fish: a big old trout, more curious than fierce
   fish = new THREE.Group();

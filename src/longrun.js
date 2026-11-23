@@ -13,6 +13,11 @@ import { G } from './progress.js';
 import { DEWPATH, grassMesh } from './plants.js';
 import { ZONES, zoneBlocked } from './zones.js';
 import { A, tone, sweep, SCALE } from './audio.js';
+import { clearAt } from './runkit.js';
+import { BURROW, layBurrow, burrowFloor } from './burrow.js';
+import { gardenWay } from './gardenway.js';
+import { WATERWAY } from './waterway.js';
+import { HIGH, HIGHK, layHigh, highNear } from './highbranch.js';
 
 // ---------- numbers to tune ----------
 export const RUNK = { half: 3.6, ceil: 6.0, minSpd: 13, tierT: 8, grace: 2, startN: 30, showGoal: 3, bump: 0.35 };
@@ -23,7 +28,7 @@ const CHORD = [261.63, 329.63, 392.0, 493.88, 587.33]; // C E G B D, one note pe
 export const CHALLENGES = [
   { text: 'Finish the loop in bee’s-eye view', ok: r => !r.third },
   { text: 'Finish the loop while still glowing', ok: r => r.tierEnd >= 1 },
-  { text: 'Finish the loop by the high branch', ok: r => !!r.high }, // the high fork comes with the new places (phase 2)
+  { text: 'Finish the loop by the high branch', ok: r => !!r.high }, // the fallen trunk and the boughs in the forest (highbranch.js)
   { text: 'Finish the loop carrying full pollen', ok: r => r.fullPollen },
   { text: 'Finish the loop at night', ok: r => r.night },
   { text: 'Finish the loop without a single bail', ok: r => r.bails === 0 },
@@ -31,10 +36,14 @@ export const CHALLENGES = [
 ];
 const SAVE_KEY = 'honeylight.run';
 
-export const RUN = { S: [], T: [], zone: [], N: 0, dewN: 0, state: 'idle', tier: 0, prog: 0, s: 0, s0: 0, offT: 0, clean: false, bails: 0, t: 0, endT: 0, result: '', stopAt: 1e9, open: 0, mem: { ch: 0 }, auto: null, lastSpd: 0, goalShown: false, why: '' };
+export const RUN = { S: [], T: [], zone: [], K: [], own: [], first: { S: [], T: [], keep: [], N: 0 }, N: 0, dewN: 0, state: 'idle', tier: 0, prog: 0, s: 0, s0: 0, offT: 0, clean: false, bails: 0, t: 0, endT: 0, result: '', stopAt: 1e9, open: 0, mem: { ch: 0 }, auto: null, lastSpd: 0, goalShown: false, why: '' };
 
 // ground under the track: the water top over the pond and the brook, else the ground
 export function groundAt(x, z) {
+  const bf = burrowFloor(x, z); if (bf !== null) return bf; // burrow.js: under the big hill the track's ground is the tunnel floor
+  return openGround(x, z);
+}
+function openGround(x, z) {
   let h = terrainH(x, z);
   if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 25) h = Math.max(h, WY);
   const bs = brookSeg(x, z); if (bs && bs.d < BROOK.hw + 1.2) h = Math.max(h, terrainBase(x, z) - BROOK.depth + 1.4);
@@ -42,29 +51,56 @@ export function groundAt(x, z) {
 }
 
 // ---------- the loop: the dew path, then on round the map and back to its start ----------
-function buildTrack() {
-  const D = DEWPATH.S, pol = (a, r) => new V3(ORCH.x + Math.cos(a) * r, 0, ORCH.z + Math.sin(a) * r);
+// Two lists of points: the first loop as it was laid, and the loop as it is now, with the places on it.
+// Where the line has not moved, the first loop's samples stay where they were, and so does the grass that was dealt along them (buildLooks):
+// a place built on one stretch must not change the look of the other stretches. So: never edit `first`. Change `now`.
+function lines() {
+  const D = DEWPATH.S, pol = (a, r) => new V3(ORCH.x + Math.cos(a) * r, 0, ORCH.z + Math.sin(a) * r), xz = p => new V3(p[0], 0, p[1]);
   const t = HEDGE_TUN, g1 = HEDGE_GAPS[1];
-  const CP = [
-    D[D.length - 2], D[D.length - 1],
-    new V3(140, 0, -128),
-    pol(t, HEDGE_R + 16), pol(t, HEDGE_R), pol(t, HEDGE_R - 14),                 // into the walled garden through the hedge tunnel
-    new V3(92, 0, -224), new V3(81, 0, -258), new V3(50, 0, -261), new V3(26, 0, -252), new V3(2, 0, -264),
-    pol(g1, HEDGE_R - 14), pol(g1, HEDGE_R), pol(g1, HEDGE_R + 16),               // out by the far gap in the hedge
-    new V3(-80, 0, -262), new V3(-148, 0, -222), new V3(-178, 0, -150), new V3(-168, 0, -62), new V3(-142, 0, -2), // round the hills to the pond
-    new V3(-150, 0, 38), new V3(-178, 0, 82),                                      // low over the pond
+  const head = [D[D.length - 2], D[D.length - 1]];
+  const hedgeIn = [pol(t, HEDGE_R + 16), pol(t, HEDGE_R), pol(t, HEDGE_R - 14)];                  // into the walled garden through the hedge tunnel
+  const hedgeOut = [pol(g1, HEDGE_R - 14), pol(g1, HEDGE_R), pol(g1, HEDGE_R + 16)];              // out by the far gap in the hedge
+  const hills = [new V3(-80, 0, -262), new V3(-148, 0, -222), new V3(-178, 0, -150), new V3(-168, 0, -62)]; // round the hills to the pond
+  const home = [new V3(-178, 0, 82),
     ...BROOK.pts.map(p => new V3(p[0], 0, p[1])),                                  // along the misty brook
     new V3(-258, 0, 212), new V3(-205, 0, 238), new V3(-151, 0, 238), new V3(-120, 0, 241), new V3(-98, 0, 244), new V3(-78, 0, 240), new V3(-56, 0, 230), new V3(-30, 0, 224), // through the forest edge
     new V3(2, 0, 202), new V3(40, 0, 172), new V3(78, 0, 136), new V3(100, 0, 104),  // home across the meadow
-    D[0], D[1],
-  ];
-  const c = new THREE.CatmullRomCurve3(CP, false, 'centripetal'); c.arcLengthDivisions = 20000;
-  const L = c.getLength(), M = Math.ceil(L / STEP), pts = c.getSpacedPoints(M);
-  // keep the samples between the dew path's last point and its first: the two ends join the dew path
+    D[0], D[1]];
+  return { D,
+    first: [...head, new V3(140, 0, -128), ...hedgeIn, new V3(92, 0, -224), new V3(81, 0, -258), new V3(50, 0, -261), new V3(26, 0, -252), new V3(2, 0, -264), ...hedgeOut,
+      ...hills, new V3(-142, 0, -2), new V3(-150, 0, 38), ...home],
+    now: [...head,
+      ...BURROW.way.map(xz),                                                       // under the big hill by the mole tunnel (burrow.js)
+      new V3(224, 0, -142), new V3(214, 0, -160), new V3(196, 0, -175), new V3(172, 0, -184), ...hedgeIn,
+      ...gardenWay().map(xz),                                                      // the pot, the bean row and the seed trays (gardenway.js)
+      ...hedgeOut, ...hills,
+      ...WATERWAY.way.map(xz),                                                     // along the spring rock, behind its waterfall and low over the pond under the reeds (waterway.js)
+      ...home] };
+}
+const curveOf = CP => { const c = new THREE.CatmullRomCurve3(CP, false, 'centripetal'); c.arcLengthDivisions = 20000; return c; };
+const tangents = S => S.map((p, i) => { const N = S.length, a = S[(i - 1 + N) % N], b = S[(i + 1) % N]; const v = new V3(b.x - a.x, 0, b.z - a.z); return v.normalize(); });
+function buildTrack() {
+  const { D, first, now } = lines(), dN = D.length, F = RUN.first;
+  // the first loop: samples one STEP apart. Keep those between the dew path's last point and its first: the two ends join the dew path
+  const cF = curveOf(first), MF = Math.ceil(cF.getLength() / STEP), pts = cF.getSpacedPoints(MF);
   const near = (q, a, b) => { let bi = a, bd = 1e9; for (let i = a; i < b; i++) { const d = pts[i].distanceTo(q); if (d < bd) { bd = d; bi = i; } } return bi; };
-  const iA = near(D[D.length - 1], 0, pts.length >> 1), iB = near(D[0], pts.length >> 1, pts.length), loopPts = pts.slice(iA + 1, iB);
-  RUN.S = D.map(p => p.clone()).concat(loopPts); RUN.N = RUN.S.length; RUN.dewN = D.length;
-  RUN.T = RUN.S.map((p, i) => { const a = RUN.S[(i - 1 + RUN.N) % RUN.N], b = RUN.S[(i + 1) % RUN.N]; const v = new V3(b.x - a.x, 0, b.z - a.z); return v.normalize(); });
+  const iA = near(D[dN - 1], 0, pts.length >> 1), iB = near(D[0], pts.length >> 1, pts.length);
+  F.S = D.map(p => p.clone()).concat(pts.slice(iA + 1, iB)); F.N = F.S.length; F.T = tangents(F.S); F.keep = F.S.map((p, j) => j < dN);
+  // the loop now. A stretch of the first loop (from its point k to k + 1) is still there if the four points that shape it stand in the list now, in a row
+  const cN = curveOf(now), LN = cN.getLength(), len = cN.getLengths(), nF = first.length - 1, nN = now.length - 1;
+  const same = (a, b) => !!a && !!b && a.x === b.x && a.z === b.z;
+  const inNow = first.map((p, k) => { for (let m = 1; m < nN - 1; m++) if ([-1, 0, 1, 2].every(o => same(first[k + o], now[m + o]))) return m; return -1; });
+  const arc = u => { const f = u * (len.length - 1), i = Math.min(Math.floor(f), len.length - 2); return len[i] + (len[i + 1] - len[i]) * (f - i); }; // how far along the loop now its curve parameter u is
+  // walk the first loop. A sample on a stretch that is still there stays. Where stretches are gone, lay new samples on the loop now, evenly, from the last sample that stayed to the next
+  const S = D.map(p => p.clone()), K = D.map((p, j) => j), own = D.map(() => -1);
+  let last = { s: arc(1 / nN), j: dN - 1 }, gone = false; // the last sample that stayed: how far along the loop now, and its number in the first loop
+  const fill = to => { const n = Math.max(0, Math.round((to.s - last.s) / STEP) - 1); for (let q = 1; q <= n; q++) { const f = q / (n + 1); S.push(cN.getPointAt((last.s + (to.s - last.s) * f) / LN)); K.push(last.j + (to.j - last.j) * f); own.push(last.j); } };
+  for (let i = iA + 1; i < iB; i++) { const j = dN + i - iA - 1, u = cF.getUtoTmapping(i / MF) * nF, k = Math.min(Math.floor(u), nF - 1), m = inNow[k];
+    if (m < 0) { gone = true; continue; }
+    const here = { s: arc((m + u - k) / nN), j }; if (gone) fill(here); S.push(pts[i].clone()); K.push(j); own.push(-1); F.keep[j] = true; last = here; gone = false; }
+  if (gone) fill({ s: arc((nN - 1) / nN), j: F.N });
+  // K: each sample's number in the first loop (in between for a new sample). own: -1 for a sample of the first loop, else the number of the first-loop sample its new stretch starts from
+  RUN.S = S; RUN.K = K; RUN.own = own; RUN.N = S.length; RUN.dewN = dN; RUN.T = tangents(S);
   RUN.zone = RUN.S.map(p => { for (const [id, Z] of Object.entries(ZONES)) if (Math.hypot(p.x - Z.c.x, p.z - Z.c.z) < Z.ring + 10) return id; return ''; });
   RUN.len = RUN.N * STEP;
 }
@@ -72,11 +108,15 @@ function buildTrack() {
 // a coarse grid over the samples for nearest-point lookups away from the run
 const CELL = 10; let grid = new Map();
 const gkey = (x, z) => (Math.floor(x / CELL) + 1000) * 4000 + Math.floor(z / CELL) + 1000;
-function buildGrid() { grid = new Map(); RUN.S.forEach((p, i) => { const k = gkey(p.x, p.z); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }); }
+const gridOf = S => { const g = new Map(); S.forEach((p, i) => { const k = gkey(p.x, p.z); if (!g.has(k)) g.set(k, []); g.get(k).push(i); }); return g; };
+function buildGrid() { grid = gridOf(RUN.S); }
+function nearIn(S, g, x, z) { let bi = -1, bd = 1e18; const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const l = g.get((cx + a + 1000) * 4000 + cz + b + 1000); if (l) for (const i of l) { const p = S[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } } }
+  return { i: bi, d: Math.sqrt(bd) }; }
 export function nearest(x, z, from = -1, win = 60) { // returns { i, d }
+  if (from < 0) return nearIn(RUN.S, grid, x, z);
   let bi = -1, bd = 1e18; const S = RUN.S, N = RUN.N;
-  if (from >= 0) { for (let k = -win; k <= win; k++) { const i = ((from + k) % N + N) % N, p = S[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } } }
-  else { const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const l = grid.get((cx + a + 1000) * 4000 + cz + b + 1000); if (l) for (const i of l) { const p = S[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } } } }
+  for (let k = -win; k <= win; k++) { const i = ((from + k) % N + N) % N, p = S[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } }
   return { i: bi, d: Math.sqrt(bd) };
 }
 // lateral distance to the track line (between samples, not just to the nearest sample)
@@ -89,8 +129,8 @@ let ribbon, walls, hud, cells = [], goalEl, edgeEl, haloMesh, pad = null;
 function buildLooks() {
   const S = RUN.S, N = RUN.N, from = RUN.dewN - 1;
   { const pos = [], uv = [], idx = [], W = 2.6; let n = 0;
-    for (let j = from; j <= N; j++) { const i = j % N, p = S[i], tg = RUN.T[i]; const w = W * (0.85 + 0.3 * Math.sin(j * 0.37) * Math.sin(j * 0.13)), wet = groundAt(p.x, p.z) > terrainH(p.x, p.z) + 0.05 ? 1 : 0;
-      for (const s of [-1, 1]) { const x = p.x - tg.z * s * w, z = p.z + tg.x * s * w; pos.push(x, groundAt(x, z) + 0.06, z); uv.push(s < 0 ? 0 : 1, j * 0.4, wet); }
+    for (let j = from; j <= N; j++) { const i = j % N, p = S[i], tg = RUN.T[i], q = j === N ? RUN.first.N : RUN.K[i]; /* q: the sample's number in the first loop, so that the width of a stretch does not change when another stretch does */ const w = burrowFloor(p.x, p.z) !== null ? 0 : W * (0.85 + 0.3 * Math.sin(q * 0.37) * Math.sin(q * 0.13)), wet = groundAt(p.x, p.z) > terrainH(p.x, p.z) + 0.05 ? 1 : 0;
+      for (const s of [-1, 1]) { const x = p.x - tg.z * s * w, z = p.z + tg.x * s * w; pos.push(x, groundAt(x, z) + 0.06, z); uv.push(s < 0 ? 0 : 1, q * 0.4, wet); }
       if (n) { const k = n * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); } n++; }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aT', new THREE.Float32BufferAttribute(uv, 3)); g.setIndex(idx); g.computeVertexNormals();
     // same worn earth as the dew path; over water it is a thin drift of duckweed instead
@@ -104,20 +144,29 @@ function buildLooks() {
       vert: `attribute vec3 aT; varying vec3 vT; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; void main(){ vT=aT; vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; vN=vec3(0.0,1.0,0.0); vC=vec3(1.0); vUv=aT.xy; vL=position; gl_Position=projectionMatrix*viewMatrix*w; }` });
     ribbon = new THREE.Mesh(g, m); ribbon.renderOrder = 1; ribbon.frustumCulled = false; scene.add(ribbon); }
   // grass walls: tall tufts hugging the new legs (the dew path has its own), with the game's own grass look
-  if (grassMesh) { const per = 26, off = [], par = []; let s = 91731; const r = (a = 1, b) => { s = (s * 1664525 + 1013904223) >>> 0; const v = s / 4294967296; return b === undefined ? v * a : a + v * (b - a); };
-    for (let j = from + 2; j < N - 2; j++) { const p = S[j], tg = RUN.T[j];
-      if (groundAt(p.x, p.z) > terrainH(p.x, p.z) + 0.05) continue; // no grass on water
-      const dO = Math.hypot(p.x - ORCH.x, p.z - ORCH.z); if (Math.abs(dO - HEDGE_R) < 10) continue; // the hedge is the wall there
-      for (let k = 0; k < per * STEP; k++) { const side = r() < 0.5 ? -1 : 1, lat = r(2.6, 7.5), along = r(-0.6, 0.6), x = p.x - tg.z * side * lat + tg.x * along, z = p.z + tg.x * side * lat + tg.z * along;
-        if (Math.hypot(x - HOLLOW.x, z - HOLLOW.z) < HOLLOW.r + 3) continue; const h = terrainH(x, z); if (h < WY + 0.6) continue;
-        const nb = nearest(x, z); if (nb.d < 2.5) continue;
-        off.push(x, h - 0.2, z); par.push(r(7, 12), r(Math.PI * 2), r(Math.PI * 2), r(0.7, 1.15)); } }
+  if (grassMesh) { const per = 26, off = [], par = [];
+    const rand = seed => { let s = seed; return (a = 1, b) => { s = (s * 1664525 + 1013904223) >>> 0; const v = s / 4294967296; return b === undefined ? v * a : a + v * (b - a); }; };
+    const hedge = p => Math.abs(Math.hypot(p.x - ORCH.x, p.z - ORCH.z) - HEDGE_R) < 10; // the hedge is the wall there
+    // one sample deals its tufts. far(x, z): how far the spot is from the track. keep(x, z): may the tuft stand (asked after its numbers are drawn, so that a tuft that goes does not change the next ones)
+    const deal = (p, tg, r, far, keep) => { for (let k = 0; k < per * STEP; k++) { const side = r() < 0.5 ? -1 : 1, lat = r(2.6, 7.5), along = r(-0.6, 0.6), x = p.x - tg.z * side * lat + tg.x * along, z = p.z + tg.x * side * lat + tg.z * along;
+        if (Math.hypot(x - HOLLOW.x, z - HOLLOW.z) < HOLLOW.r + 3) continue; const h = terrainH(x, z); if (h < WY + 0.6) continue; if (far(x, z) < 2.5) continue;
+        const q = [r(7, 12), r(Math.PI * 2), r(Math.PI * 2), r(0.7, 1.15)]; if (!keep(x, z)) continue; off.push(x, h - 0.2, z); par.push(...q); } };
+    // the first loop deals first, just as it did when it was laid: the grass on a stretch that has not moved since stays the same, blade for blade.
+    // A tuft stands only if its own sample stayed, and if it is off the track and off the places as they are now (runkit.js: the places keep their own ground clear)
+    { const F = RUN.first, g0 = gridOf(F.S), r = rand(91731);
+      for (let j = from + 2; j < F.N - 2; j++) { const p = F.S[j]; if (openGround(p.x, p.z) > terrainH(p.x, p.z) + 0.05) continue; /* no grass on water */ if (hedge(p)) continue;
+        deal(p, F.T[j], r, (x, z) => nearIn(F.S, g0, x, z).d, (x, z) => F.keep[j] && nearest(x, z).d >= 2.5 && clearAt(x, z) >= 1); } }
+    // then the stretches laid since, each from a seed of its own
+    { let r = null, id = -1;
+      for (let j = from + 2; j < N - 2; j++) { if (RUN.own[j] < 0) continue; if (RUN.own[j] !== id) { id = RUN.own[j]; r = rand(40503 + id * 7919); }
+        const p = S[j]; if (Math.abs(groundAt(p.x, p.z) - terrainH(p.x, p.z)) > 0.05) continue; /* no grass on water, and none over the tunnel */ if (hedge(p)) continue;
+        deal(p, RUN.T[j], r, (x, z) => nearest(x, z).d, (x, z) => clearAt(x, z) >= 1); } }
     const gg = new THREE.InstancedBufferGeometry(); const src = grassMesh.geometry; gg.setAttribute('position', src.attributes.position); gg.setIndex(src.index);
     gg.setAttribute('aOff', new THREE.InstancedBufferAttribute(new Float32Array(off), 3)); gg.setAttribute('aPar', new THREE.InstancedBufferAttribute(new Float32Array(par), 4)); gg.instanceCount = off.length / 3;
     walls = new THREE.Mesh(gg, grassMesh.material); walls.frustumCulled = false; scene.add(walls); RUN.wallN = gg.instanceCount;
     // the world's own grass stands short on the track itself (only blade heights change, no random numbers)
     const a = src.attributes.aOff, pa = src.attributes.aPar, n = src.instanceCount;
-    for (let i = 0; i < n; i++) { const x = a.getX(i), z = a.getZ(i), nb = nearest(x, z); if (nb.i < RUN.dewN || nb.d > 2.6) continue; pa.setX(i, pa.getX(i) * lerp(0.1, 1, clamp((nb.d - 1.4) / 1.2, 0, 1))); }
+    for (let i = 0; i < n; i++) { const x = a.getX(i), z = a.getZ(i), nb = nearest(x, z), ck = clearAt(x, z); if (ck < 1) pa.setX(i, pa.getX(i) * Math.max(0.02, ck)); if (nb.i < RUN.dewN || nb.d > 2.6) continue; pa.setX(i, pa.getX(i) * lerp(0.1, 1, clamp((nb.d - 1.4) / 1.2, 0, 1))); }
     pa.needsUpdate = true; }
   // a soft glow round the bee, seen in follow view (in the bee's eyes the light on the grass and the screen edges show it)
   haloMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.ShaderMaterial({ uniforms: { uC: { value: new V3() }, uA: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
@@ -152,7 +201,7 @@ function saveMem() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(RUN.mem
 
 export function setupLongRun() {
   const gameRandom = Math.random; let ids = 52011; Math.random = () => { ids = (ids * 1664525 + 1013904223) >>> 0; return ids / 4294967296; };
-  buildTrack(); buildGrid(); buildLooks(); loadMem();
+  buildTrack(); layBurrow(RUN.S); layHigh(RUN.S); buildGrid(); buildLooks(); loadMem();
   Math.random = gameRandom;
   updateOpen();
   window.__run = { RUN, RUNK, CHALLENGES, nearest, groundAt, startAuto, stopAuto, reset: () => endRun('reset', true) };
@@ -174,7 +223,7 @@ function placeAuto(dt) { const a = RUN.auto, N = RUN.N; a.s += a.spd * dt / STEP
 
 // ---------- the run itself ----------
 function startRun(i) {
-  Object.assign(RUN, { state: 'run', tier: 0, prog: 0, s: i, s0: i, offT: 0, clean: true, bails: 0, t: 0, goalShown: false, why: '', third: !!G.third, allThird: !!G.third, minPollen: P.pollen, nightStart: !!(window.NIGHT && window.NIGHT.active) });
+  Object.assign(RUN, { state: 'run', tier: 0, prog: 0, s: i, s0: i, offT: 0, clean: true, bails: 0, t: 0, goalShown: false, why: '', third: !!G.third, allThird: !!G.third, minPollen: P.pollen, nightStart: !!(window.NIGHT && window.NIGHT.active), hj: -1, hiN: 0, up: false });
   hud.style.opacity = 1; goalEl.style.opacity = 0;
 }
 function endRun(result, quiet = false) {
@@ -183,7 +232,7 @@ function endRun(result, quiet = false) {
   if (quiet) { RUN.state = 'idle'; hud.style.opacity = 0; goalEl.style.opacity = 0; return; }
   let msg = '';
   if (result === 'done') {
-    const r = { third: RUN.third, allThird: RUN.allThird, tierEnd: RUN.tier, bails: RUN.bails, fullPollen: RUN.minPollen >= G.cap && P.pollen >= G.cap, night: RUN.nightStart && !!(window.NIGHT && window.NIGHT.active), high: false };
+    const r = { third: RUN.third, allThird: RUN.allThird, tierEnd: RUN.tier, bails: RUN.bails, fullPollen: RUN.minPollen >= G.cap && P.pollen >= G.cap, night: RUN.nightStart && !!(window.NIGHT && window.NIGHT.active), high: HIGH.upN > 0 && RUN.hiN >= HIGHK.need * HIGH.upN }; // high: it kept to the high branch (highbranch.js)
     RUN.last = r; const ch = CHALLENGES[RUN.mem.ch];
     if (ch && ch.ok(r)) { RUN.mem.ch++; saveMem(); msg = `Challenge ${RUN.mem.ch} complete`; tone(SCALE[2], 0.1, 2.4); tone(SCALE[4], 0.08, 2.4, 'sine', 0.15); tone(SCALE[7], 0.07, 2.6, 'sine', 0.3); }
     else { msg = 'All the way round'; tone(SCALE[4], 0.08, 2); tone(SCALE[7], 0.06, 2.2, 'sine', 0.15); }
@@ -204,9 +253,12 @@ export function runFrame(dt) {
     RUN.t += dt;
     if (!flying) { endRun('quit', true); }
     else {
-      const N = RUN.N, prevI = ((Math.round(RUN.s) % N) + N) % N, nb = nearest(x, z, prevI, 40);
-      let di = nb.i - prevI; if (di > N / 2) di -= N; if (di < -N / 2) di += N; RUN.s += di;
-      const lat = lateral(x, z, nb.i), alt = P.pos.y - groundAt(x, z), tg = RUN.T[nb.i], fwd = P.vel.x * tg.x + P.vel.z * tg.z;
+      const N = RUN.N, prevI = ((Math.round(RUN.s) % N) + N) % N; let lat, alt, tg;
+      // highbranch.js: is the bee on the high branch (up on the wood, not where it still lies on the ground)? Then the wood is its track and its ground
+      const hb = highNear(x, z), up = !!hb && HIGH.lift[hb.j] > HIGHK.lift && hb.lat < RUNK.half && P.pos.y - hb.top > -HIGHK.under && P.pos.y - hb.top < RUNK.ceil;
+      if (up) { RUN.s = HIGH.i0 + hb.j / (HIGH.N - 1) * (HIGH.i1 - HIGH.i0); lat = hb.lat; alt = P.pos.y - hb.top; tg = HIGH.T[hb.j]; if (hb.j > RUN.hj && hb.j - RUN.hj < 8) RUN.hiN += hb.j - RUN.hj; RUN.hj = Math.max(RUN.hj, hb.j); }
+      else { const nb = nearest(x, z, prevI, 40); let di = nb.i - prevI; if (di > N / 2) di -= N; if (di < -N / 2) di += N; RUN.s += di; lat = lateral(x, z, nb.i); alt = P.pos.y - groundAt(x, z); tg = RUN.T[nb.i]; }
+      RUN.up = up; const fwd = P.vel.x * tg.x + P.vel.z * tg.z;
       const bumped = RUN.lastSpd > 6 && spd < RUN.lastSpd * (1 - RUNK.bump);
       const on = lat < RUNK.half, low = alt < RUNK.ceil, fast = fwd > RUNK.minSpd, clean = on && low && fast && !bumped;
       if (G.third) RUN.allThird = RUN.allThird && true; else RUN.allThird = false; if (G.third) RUN.third = true;

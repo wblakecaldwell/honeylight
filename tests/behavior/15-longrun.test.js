@@ -98,10 +98,10 @@ module.exports = [
     open: { storage: { 'honeylight.run': null } },
     async run(t) {
       const r = await t.ev(([allOpen, ride]) => { eval(allOpen)(); const go = eval(ride), R = __run.RUN, el = document.getElementById('rungoal'), out = {};
-        go({ i: 2, spd: 24 }, 2.5); out.before = R.goalShown; T.sim(1); out.text1 = el.textContent; out.shown = el.style.opacity;
+        go({ i: 2, spd: 26 }, 2.5); out.before = R.goalShown; T.sim(1); out.text1 = el.textContent; out.shown = el.style.opacity;
         __g.G.third = true; T.sim(70); out.thirdRun = [R.result, R.mem.ch]; __g.G.third = false; __run.stopAuto(); T.sim(4);
-        go({ i: 2, spd: 24 }, 70); out.fpv = [R.result, R.mem.ch, el.textContent]; out.saved = JSON.parse(localStorage.getItem('honeylight.run')).ch; __run.stopAuto(); T.sim(4);
-        go({ i: 2, spd: 24 }, 4); out.text2 = el.textContent; T.sim(66); out.second = [R.result, R.mem.ch];
+        go({ i: 2, spd: 26 }, 70); out.fpv = [R.result, R.mem.ch, el.textContent]; out.saved = JSON.parse(localStorage.getItem('honeylight.run')).ch; __run.stopAuto(); T.sim(4);
+        go({ i: 2, spd: 26 }, 4); out.text2 = el.textContent; T.sim(66); out.second = [R.result, R.mem.ch];
         return out; }, [allOpen, ride]);
       t.eq(r.before, false, 'not before 3 s'); t.eq(r.text1, 'Challenge 1: Finish the loop in bee’s-eye view', 'the first challenge'); t.eq(r.shown, '1', 'it shows');
       t.eq(r.thirdRun, ['done', 0], 'a loop in follow view does not win challenge 1');

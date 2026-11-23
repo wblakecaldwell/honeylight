@@ -26,6 +26,15 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `audio.js` | Sound: the audio graph, tones, noise and sweeps. |
 | `loop.js` | The frame loop and the big update that flies the bee. |
 | `debug.js` | `window.__g`: the handles that tests and tools use. |
+| `gaps.js` | Tight spots: small natural openings to fly through, their chime and their lines. |
+| `longrun.js` | The long run: the track round the whole map, the zone rules, tiers and bails, the cells, the light and the challenges. |
+| `solids.js` | Plain solid shapes for the long run's places (sticks, balls, stones, blocks, pipes) and the test that keeps the bee out of them. |
+| `runkit.js` | The building kit for the long run's places: shared materials, lumpy shapes, ferns, grass clearings, and `quietBuild` (its own random numbers). |
+| `burrow.js` | The mole tunnel under the big hill. |
+| `gardenway.js` | The garden pieces on the long run: the tipped pot, the bean row and the seed trays. |
+| `waterway.js` | The spring rock, its rill and waterfall, the lily pads and the reed arches. |
+| `mossway.js` | The mossy way in the forest: moss, ferns, big roots, root arches, the old stump and the hollow log. |
+| `highbranch.js` | The high branch: the fallen trunk, the boughs under the crowns, and how the run knows the bee is on it. |
 
 Outside `src/`: `night.js` (the night: moon, fireflies, the hollow grove), `moonflowers.js` (the moonflower models), `moths.js` and `moth-model.js` (hawk moths from the second night), and `bat.js` and `bat-model.js` (the bat from the third night) are separate on purpose.
 The storm is separate too: `storm.js` (when and where it rains, what rain does to the bee, the rainbow's foot) and `storm-view.js` (what it looks like: rain, the rain front, lightning, the rainbow). It reaches `src/` only through hooks tagged "storm.js".

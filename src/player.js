@@ -13,6 +13,8 @@ import { nestCollide } from './wasps.js';
 import { wriggle } from './hazards.js';
 import { G } from './progress.js';
 import { zoneWalls, forestCollide } from './zones.js';
+import { solidsCollide } from './solids.js';
+import { burrowHolds } from './burrow.js';
 import { tone, noiseHit, sweep } from './audio.js';
 import { camPos, inHive, time } from './loop.js';
 import { GW } from './gaps.js';
@@ -90,7 +92,8 @@ export function collide(p, v) {
   archCollide(p, v);
   for (const s of STONES) { const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz); if (d < 8 && p.y < s.y + 0.4 + PR) { if (d > 6.5) { const k = 8 / Math.max(d, 0.01); p.x = s.x + dx * k; p.z = s.z + dz * k; } else { p.y = s.y + 0.4 + PR; v.y = Math.max(v.y, 0); } } }
   const tr = trunkR(p.y) + PR; if (rad < tr && p.y < 92) { const k = tr / Math.max(rad, 0.01); p.x *= k; p.z *= k; }
-  const gy = terrainH(p.x, p.z) + PR; if (p.y < gy) { p.y = gy; v.y = Math.max(v.y, 0); }
+  solidsCollide(p, v, PR); // solids.js: the long run's places (stones, canes, pots, roots)
+  const gy = terrainH(p.x, p.z) + PR; if (p.y < gy && !burrowHolds(p, v)) { p.y = gy; v.y = Math.max(v.y, 0); } // burrow.js: inside the mole tunnel the bee may be under the hill
 }
 
 // ---------- third-person view (V) ----------
