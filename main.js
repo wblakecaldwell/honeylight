@@ -21,6 +21,7 @@ import * as trails from './src/trails.js';
 import * as loop from './src/loop.js';
 import * as debug from './src/debug.js';
 import * as gaps from './src/gaps.js';
+import * as longrun from './src/longrun.js';
 
 engine.setupColorSpace();
 world.setupLandmarks();
@@ -95,3 +96,4 @@ wasps.setupCalm();
 controls.setupFieldNotes();
 debug.setupDebug();
 gaps.setupGaps();
+longrun.setupLongRun();

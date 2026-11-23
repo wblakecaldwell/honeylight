@@ -51,10 +51,12 @@ export function setupShaders() {
   U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 };
   // night hooks (night.js): uNight 0..1 turns the sun into the moon and brings out the stars; uLamp is one soft light that travels with the bee (xyz, strength)
   U.uNight = { value: 0 }; U.uLamp = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uLampC = { value: new V3(1.0, 0.78, 0.36) };
+  // long run hook (longrun.js): uAura is the coloured light round the bee while it is in the zone (xyz, strength); off (0) it adds nothing
+  U.uAura = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uAuraC = { value: new V3(1.0, 0.8, 0.3) };
   // storm hooks (storm.js): uStorm = (direction x, direction z, where the cloud edge is in the sky, strength 0..1); uStorm2 = (the cloud's far edge, rain mist, gloom under the cloud)
   U.uStorm = { value: new THREE.Vector4(1, 0, 0, 0) }; U.uStorm2 = { value: new V3(0, 0, 0) };
   COMMON = `
-uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC; uniform vec4 uStorm; uniform vec3 uStorm2;
+uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC; uniform vec4 uAura; uniform vec3 uAuraC; uniform vec4 uStorm; uniform vec3 uStorm2;
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;
 float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -94,6 +96,7 @@ vec3 shade(vec3 alb, vec3 n, vec3 p, float spec, float sss){
      + uAmb*(vec3(0.22,0.30,0.50)*(0.55+0.45*n.y)*(0.75+0.25*shd) + vec3(0.26,0.19,0.08)*(0.5-0.5*n.y)) );
   vec3 H=normalize(uSun+V); lo+=sunC*shd*spec*pow(max(dot(n,H),0.0),48.0)*step(0.0,nd);
   if(uLamp.w>0.0){ vec3 Lq=uLamp.xyz-p; float dq=dot(Lq,Lq); lo+=alb*uLampC*(uLamp.w/(1.0+dq*0.045))*(0.35+0.65*max(dot(n,Lq*inversesqrt(dq+1e-4)),0.0)); }
+  if(uAura.w>0.0){ vec3 La=uAura.xyz-p; float da=dot(La,La); lo+=alb*uAuraC*(uAura.w/(1.0+da*0.06))*(0.4+0.6*max(dot(n,La*inversesqrt(da+1e-4)),0.0)); }
   lo+=uAmb*vec3(1.1,0.75,0.42)*spec*0.6*pow(1.0-max(dot(n,V),0.0),4.0)*(0.3+0.7*shd);
   vec3 L=vec3(10.6,${TY.toFixed(1)},0.0)-p; float d=length(L); L/=d;
   float att=24.0/(8.0+d*d);

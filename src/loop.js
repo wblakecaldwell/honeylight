@@ -20,6 +20,7 @@ import { zoneLocked, updateZones } from './zones.js';
 import { updateTrails } from './trails.js';
 import { A, tone, SCALE, noiseHit, sweep, setG } from './audio.js';
 import { GW, gapsInput, gapsStep, gapsFrame } from './gaps.js';
+import { runFrame } from './longrun.js';
 
 // ---------- main loop ----------
 export const fwd = new V3(), right = new V3(), acc = new V3(), tmp = new V3(), camPos = new V3();
@@ -156,6 +157,7 @@ export function update(dt) {
   fish.userData.tail.rotation.y = Math.sin(time * (P.mode === 'gulp' ? 9 : 3)) * 0.45;
 
   gapsFrame(dt, time);
+  runFrame(dt); // longrun.js: the long run round the map
   updateWind(dt); updateAirLife(dt); updateRescueShadowAndWaspSound(dt); updateBees(dt, time); updateWasps(dt); updateWebs(dt); updateRich(dt); updateForagingAndHedgeWind(dt); updateParts(dt); updateHud(dt);
 
   // overlays

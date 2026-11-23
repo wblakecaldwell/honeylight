@@ -257,8 +257,21 @@ The owner asked for this on 2026-11-22 ("FPV pilots love flying through small ho
 - **GAP-005** Each opening is clear at its centre and solid round its edge.
 - **GAP-006** Before the bee has flown a spot, a few motes of seed fluff drift through it as if the air is drawn through. After the first pass, blue speedwell flowers open round it and stay (saved in `honeylight.gaps`). Moss grows at each spot; at night the moss of a finished line glows.
 
+## 17. The long run (minigame mode)
+
+- **RUN-001** The dew path continues as one worn track that loops the whole map and comes back to its own start in the meadow: up the meadow, into the walled garden through the hedge tunnel, out by the far hedge gap, round the hills, low over the lily pond, along the misty brook, through the forest edge, and home across the meadow. Thick grass walls line it on land; over water it is a drift of duckweed. Nothing solid blocks it at flying height.
+- **RUN-002** A bee can fly the whole loop with normal flight and no ability, at full speed, in about one minute.
+- **RUN-003** The run starts when the bee comes onto the start of the track low and fast. The bee is "in the zone" while it stays on the track, low (under 6 above the ground or water) and fast (13 or more along the track). Each 8 seconds of clean flight adds one tier, up to 5.
+- **RUN-004** A bail (off the track, too high, too slow, or a bump) drops one tier and the run goes on. The run ends when the bee is off the track or slow for more than 2 seconds.
+- **RUN-005** The run goes as far as the open zones. At the first closed zone the track stops and the run ends with "The trail is overgrown past here".
+- **RUN-006** Five honeycomb cells at the bottom of the screen show the tiers: gold, pink, lavender, blue, then all colours. The cell being earned fills like honey. The cells flicker while the bee is off the track. They show only during a run.
+- **RUN-007** The bee carries a coloured light while in the zone. It lights the grass and the track round the bee, gets brighter with each tier, and takes the tier's colour (the top tier cycles through all of them). In follow view a soft glow surrounds the bee. The screen edges take the same colour. A soft chord adds one note per tier.
+- **RUN-008** When the whole loop is open, after 3 seconds of a run a line shows the next challenge, for example "Challenge 1: Finish the loop in bee's-eye view". It never names the prize. Challenges come in this order and only the next one can be won, at most one per run: bee's-eye view; still glowing at the end; by the high branch; carrying full pollen; at night; without a single bail; in follow view. Progress is saved.
+- **RUN-009** The long run is minigame mode: on-screen text is allowed there (an exception to CHL-004). It gives no honey.
+
 ## Change log
 
+- 2026-11-23: Added section 17 (the long run, RUN-001 to RUN-009), phase 1 of the owner's long run design. The high branch (challenge 3) comes with the new places in phase 2.
 - 2026-11-22: GAP-003 changed: no tumble, a plain bump; passes need speed and a clean line. The wall holes are now exactly as big as they look.
 - 2026-11-22: Added GAP-001 to GAP-006 (tight spots).
 - 2026-11-22: TRY-001 changed (the owner's request): the try-out menu is hidden unless the address has `#menu-on` or `?menu=1`.
