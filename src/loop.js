@@ -21,6 +21,7 @@ import { updateTrails } from './trails.js';
 import { A, tone, SCALE, noiseHit, sweep, setG, sndRnd } from './audio.js';
 import { GW, gapsInput, gapsStep, gapsFrame } from './gaps.js';
 import { runFrame } from './longrun.js';
+import { raceMapFrame, draw as drawRaceMap } from './racemap.js';
 import { waterwayFrame } from './waterway.js';
 import { updateRunWorld } from './runworld.js';
 import { wardrobeWalk, updateWardrobe } from './wardrobe.js';
@@ -39,7 +40,7 @@ export function setupLoopState() {
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  update(dt); renderFrame(); adaptRes(now - (frame.prev || now)); frame.prev = now;
+  update(dt); drawRaceMap(); renderFrame(); adaptRes(now - (frame.prev || now)); frame.prev = now;
 }
 export function update(dt) {
   time += dt; P.t += dt;
@@ -162,6 +163,7 @@ export function update(dt) {
 
   gapsFrame(dt, time);
   runFrame(dt); // longrun.js: the long run round the map
+  raceMapFrame(); // racemap.js: the race maps and the clock show three seconds into a run
   updateRunWorld(dt); // runworld.js: the grass, flowers, petals and dew answer a bee in the zone
   waterwayFrame(dt); // waterway.js: the little waterfall wets a bee that flies through it
   updateWardrobe(dt); // wardrobe.js: the card at the wardrobe cell

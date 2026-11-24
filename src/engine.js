@@ -61,7 +61,7 @@ export function setupShaders() {
   U = { uTime: { value: 0 }, uCam: { value: new V3() }, uSun: { value: SUN }, uGlow: { value: 0 }, uShadow: { value: shadowRT.depthTexture }, uShadowM: { value: new M4() }, uShadowOn: { value: 0 } };
   U.uWind = { value: new V3() }; U.uHome = { value: new V3(1, 0, 0) }; U.uHomeK = { value: 0 };
   MP = !/mp=0/.test(location.search); // model pass (trees, grass, hive door). ?mp=0 shows the old look
-  U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 };
+  U.uSunC = { value: new V3(2.9, 2.1, 1.3) }; U.uAmb = { value: 1 }; U.uHaze = { value: new V3(1, 1, 1) }; U.uClose = { value: 0 }; U.uMapView = { value: 0 }; /* racemap.js: 1 while the overhead map is drawn (no distance haze) */
   // night hooks (night.js): uNight 0..1 turns the sun into the moon and brings out the stars; uLamp is one soft light that travels with the bee (xyz, strength)
   U.uNight = { value: 0 }; U.uLamp = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uLampC = { value: new V3(1.0, 0.78, 0.36) };
   // long run hook (longrun.js): uAura is the coloured light round the bee while it is in the zone (xyz, strength); off (0) it adds nothing
@@ -72,7 +72,7 @@ export function setupShaders() {
   // storm hooks (storm.js): uStorm = (direction x, direction z, where the cloud edge is in the sky, strength 0..1); uStorm2 = (the cloud's far edge, rain mist, gloom under the cloud)
   U.uStorm = { value: new THREE.Vector4(1, 0, 0, 0) }; U.uStorm2 = { value: new V3(0, 0, 0) };
   COMMON = `
-uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC; uniform vec4 uAura; uniform vec3 uAuraC; uniform vec4 uStorm; uniform vec3 uStorm2;
+uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC; uniform float uMapView; uniform vec4 uAura; uniform vec3 uAuraC; uniform vec4 uStorm; uniform vec3 uStorm2;
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;
 ${HASH}
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -131,7 +131,7 @@ vec3 finish(vec3 c, vec3 p){
   float hgt=exp(-max(p.y-(${GY}.0),0.0)*0.035);
   float f=(1.0-exp(-dist*(0.0012+0.0024*hgt)))*(1.0-ih);
   if(uStorm2.y>0.001) f=(1.0-exp(-dist*(0.0012+0.0024*hgt+0.007*uStorm2.y)))*(1.0-ih);
-  return mix(c,hazeCol(dir),f);
+  return mix(c,hazeCol(dir),f*(1.0-uMapView));
 }
 #define NORMAL (gl_FrontFacing? normalize(vN) : -normalize(vN))
 ` + UNTONE;
@@ -237,7 +237,7 @@ const depthVert = `void main(){ mat4 m=modelMatrix;
   gl_Position=projectionMatrix*viewMatrix*(m*vec4(position,1.0)); }`;
 export const casters = [], hidden = [];
 const _shc = new V3(), _sl = new V3(), _sInv = new M4();
-function renderShadows() {
+export function renderShadows() { // racemap.js calls it once before its first picture if no frame has been drawn yet
   // centre the shadow box a little ahead of the camera, snapped to whole texels so edges don't shimmer
   camera.getWorldDirection(_shc); _shc.y = 0; if (_shc.lengthSq() < 1e-4) _shc.set(0, 0, -1); _shc.normalize().multiplyScalar(SHADOW_HALF * 0.55).add(camera.position);
   shadowCam.position.set(0, 0, 0); shadowCam.up.copy(sunUp); shadowCam.lookAt(-SUN.x, -SUN.y, -SUN.z); shadowCam.updateMatrixWorld();

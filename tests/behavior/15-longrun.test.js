@@ -36,12 +36,12 @@ module.exports = [
       t.check(r.secs > 40 && r.secs < 80, 'in about a minute: ' + r.secs + ' s'); t.eq(r.tier, 5, 'at the top tier at the end');
       return r;
     } },
-  { id: 'RUN-003-tiers', req: 'RUN-003', name: 'Each 8 seconds of clean flight adds a tier, up to 5; the run starts only on the start of the track',
+  { id: 'RUN-003-tiers', req: 'RUN-003', name: 'Each 8 seconds of clean flight adds a tier, up to 5; the run starts on any open part of the track',
     async run(t) {
       const r = await t.ev(([allOpen, ride]) => { eval(allOpen)(); const go = eval(ride), R = __run.RUN, out = {};
         const mid = go({ i: 500, spd: 22 }, 3); out.midStart = mid.state; __run.stopAuto(); __run.reset();
         go({ i: 2, spd: 22 }, 7.5); out.t7 = R.tier; T.sim(1); out.t8 = R.tier; T.sim(8); out.t16 = R.tier; T.sim(28); out.t44 = R.tier; out.bails = R.bails; out.state = R.state; return out; }, [allOpen, ride]);
-      t.eq(r.midStart, 'idle', 'flying onto the middle of the track does not start a run');
+      t.eq(r.midStart, 'run', 'flying onto the middle of the track starts a run there');
       t.eq([r.t7, r.t8, r.t16, r.t44], [0, 1, 2, 5], 'a tier every 8 s, capped at 5'); t.eq(r.bails, 0, 'no bails'); t.eq(r.state, 'run', 'still running');
       return r;
     } },
@@ -100,8 +100,8 @@ module.exports = [
       const r = await t.ev(([allOpen, ride]) => { eval(allOpen)(); const go = eval(ride), R = __run.RUN, el = document.getElementById('rungoal'), out = {};
         go({ i: 2, spd: 26 }, 2.5); out.before = R.goalShown; T.sim(1); out.text1 = el.textContent; out.shown = el.style.opacity;
         __g.G.third = true; T.sim(70); out.thirdRun = [R.result, R.mem.ch]; __g.G.third = false; __run.stopAuto(); T.sim(4);
-        go({ i: 2, spd: 26 }, 70); out.fpv = [R.result, R.mem.ch, el.textContent]; out.saved = JSON.parse(localStorage.getItem('honeylight.run')).ch; __run.stopAuto(); T.sim(4);
-        go({ i: 2, spd: 26 }, 4); out.text2 = el.textContent; T.sim(66); out.second = [R.result, R.mem.ch];
+        go({ i: 2, spd: 26 }, 72); out.fpv = [R.result, R.mem.ch, el.textContent]; out.saved = JSON.parse(localStorage.getItem('honeylight.run')).ch; __run.stopAuto(); T.sim(4);
+        go({ i: 2, spd: 26 }, 4); out.text2 = el.textContent; T.sim(69); out.second = [R.result, R.mem.ch];
         return out; }, [allOpen, ride]);
       t.eq(r.before, false, 'not before 3 s'); t.eq(r.text1, 'Challenge 1: Finish the loop in bee’s-eye view', 'the first challenge'); t.eq(r.shown, '1', 'it shows');
       t.eq(r.thirdRun, ['done', 0], 'a loop in follow view does not win challenge 1');
