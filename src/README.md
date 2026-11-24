@@ -38,6 +38,7 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `runworld.js` | The world answers the long run: the grass bow wave, flowers that spring up along the track, petals, sparks, dew and warmer light. |
 | `rope.js` | Ropes in the air: short chains of points that stream behind a bee (the scarf's ends, the leaf on the cap), with wind, weight and the swing to the outside of a turn. |
 | `wear.js` | What a bee can wear: the seven pieces of the wardrobe, their models, and how they follow the player's bee. |
+| `lookcam.js` | The camera that moves on its own: look at yourself when you sit still, danger sense (the nearest wasp in the picture), B to look behind, and smooth moves out of and into the bee's eyes and on V. `?look=0` switches it off. |
 | `wardrobe.js` | The wardrobe cell on the comb near the door, its card, and what is earned and worn (saved with the long run). |
 
 Outside `src/`: `night.js` (the night: moon, fireflies, the hollow grove), `moonflowers.js` (the moonflower models), `moths.js` and `moth-model.js` (hawk moths from the second night), and `bat.js` and `bat-model.js` (the bat from the third night) are separate on purpose. So is `runnight.js` (fireflies that fall in round a bee on the long run at night; `?runnight=0` switches it off).

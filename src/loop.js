@@ -24,6 +24,7 @@ import { runFrame } from './longrun.js';
 import { waterwayFrame } from './waterway.js';
 import { updateRunWorld } from './runworld.js';
 import { wardrobeWalk, updateWardrobe } from './wardrobe.js';
+import { updateLookCam } from './lookcam.js';
 
 // ---------- main loop ----------
 export const fwd = new V3(), right = new V3(), acc = new V3(), tmp = new V3(), camPos = new V3();
@@ -142,7 +143,7 @@ export function update(dt) {
   const sv = P.vel.dot(right);
   const targetRoll = P.mode === 'fly' ? clamp(P.yawRate * 2.8 - sv * 0.03, -0.6, 0.6) + Math.sin(time * 2.6) * 0.02 * P.pollen : 0;
   P.roll = lerp(P.roll, targetRoll, Math.min(1, dt * 5));
-  camera.position.copy(camPos); camera.rotation.set(P.pitch + (G.third ? 0 : GW.pitch), P.yaw, P.roll + (G.third ? 0 : GW.roll)); viewBlend(); camera.updateMatrixWorld(); thirdPerson(dt); // gaps.js: in the bee's eyes the tumble turns the view; in follow view only the bee turns
+  camera.position.copy(camPos); camera.rotation.set(P.pitch + (G.third ? 0 : GW.pitch), P.yaw, P.roll + (G.third ? 0 : GW.roll)); viewBlend(); camera.updateMatrixWorld(); thirdPerson(dt); updateLookCam(dt); // lookcam.js: look at yourself, danger sense, B; gaps.js: in the bee's eyes the tumble turns the view; in follow view only the bee turns
   const spd = P.vel.length(); fov = lerp(fov, 74 + Math.min(9, spd * 0.3), Math.min(1, dt * 3)); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   U.uCam.value.copy(camPos); sky.position.copy(camPos);
   ants.forEach((a, i) => { const s = i ? -1 : 1; a.rotation.x = Math.sin(time * 1.7 + i) * 0.05 + clamp(spd * 0.012, 0, 0.3) + (P.mode === 'cell' ? Math.sin(time * 6 + i * 2) * 0.05 : 0); a.rotation.y = s * (Math.sin(time * 1.3 + i * 2) * 0.06) + P.yawRate * 3; });

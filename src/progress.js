@@ -27,7 +27,7 @@ export const UNLOCKS = [
 let hud, toastEl;
 export function setupProgress() {
   P.load = [];
-  try { const s = JSON.parse(localStorage.getItem('honeylight.save2') || 'null'); if (s) { G.honey = s.honey | 0; G.workers = s.workers | 0; G.spent = s.spent | 0; G.zones = s.zones || (G.honey >= 20 ? { garden: true } : {}); G.daySave = s.day || null; } else { G.honey = Math.round((P.honey || 0) * 20); G.zones = G.honey >= 20 ? { garden: true } : {}; } } catch (e) { }
+  try { const s = JSON.parse(localStorage.getItem('honeylight.save2') || 'null'); if (s) { G.honey = s.honey | 0; G.workers = s.workers | 0; G.escapes = s.escapes | 0; G.spent = s.spent | 0; G.zones = s.zones || (G.honey >= 20 ? { garden: true } : {}); G.daySave = s.day || null; } else { G.honey = Math.round((P.honey || 0) * 20); G.zones = G.honey >= 20 ? { garden: true } : {}; } } catch (e) { }
   addEventListener('pagehide', save); setInterval(() => { if (P.mode === 'fly' || P.mode === 'crawl') save(); }, 15000);
   for (let i = 0; i < G.workers; i++) makeForager();
   applyUnlocks(false);
@@ -35,7 +35,7 @@ export function setupProgress() {
   hud = $('hud'), toastEl = $('toast');
 }
 
-export function save() { try { localStorage.setItem('honeylight.save2', JSON.stringify({ honey: G.honey, workers: G.workers, spent: G.spent, zones: G.zones, day: typeof DAY === 'object' && DAY ? DAY.save() : undefined })); } catch (e) { } }
+export function save() { try { localStorage.setItem('honeylight.save2', JSON.stringify({ honey: G.honey, workers: G.workers, spent: G.spent, escapes: G.escapes | 0, zones: G.zones, day: typeof DAY === 'object' && DAY ? DAY.save() : undefined })); } catch (e) { } }
 export function applyUnlocks(announce) { for (const u of UNLOCKS) if (G.honey >= u.at && !u.done) { u.done = true; u.apply(); if (announce) { toast(`<b>${u.name}</b><br><span>${u.desc}</span>`, 6); [0, 2, 4, 7].forEach((n, i) => tone(SCALE[n], 0.1, 2.6, 'sine', i * 0.12)); } } }
 export function toast(html, secs = 5) { toastEl.innerHTML = html; toastEl.style.opacity = 1; G.toastT = secs; }
 export function gainHoney(v) {

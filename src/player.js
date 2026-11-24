@@ -105,7 +105,7 @@ export function setupThirdPerson() {
   try { G.third = localStorage.getItem('honeylight.view') !== '1'; } catch (e) { G.third = true; } // a new game starts with the camera outside the bee; V changes it and the choice is kept
   me = newBee(1); me.s.set(0.001, 0.001, 0.001);
   _yflip = new Q4().setFromAxisAngle(YA, Math.PI);
-  me.update = () => { const on = G.third && camDist > 0.7 && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6 + GW.pitch, P.yaw, P.roll * 1.3 + GW.roll)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.6, -1.2, 1.2); me.fly = P.mode === 'fly' && !GW.still; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
+  me.update = () => { const on = (VIEW.vis === null ? G.third && camDist > 0.7 : VIEW.vis) && P.mode !== 'title' && P.mode !== 'cell' && P.mode !== 'emerge' && P.mode !== 'gulp'; me.p.copy(P.pos); me.q.setFromEuler(_meE.set(P.pitch * 0.6 + GW.pitch, P.yaw, P.roll * 1.3 + GW.roll)).multiply(_yflip); me.vel = P.vel; me.bank = clamp(-P.roll * 2.6, -1.2, 1.2); me.fly = P.mode === 'fly' && !GW.still; me.s.setScalar(on ? 1 : 0.001); ants.forEach(a => a.visible = !on); baskets.forEach(b => b.visible = !on); };
   P.cdir = new V3(0, 1, 0);
   // on the comb the bee waddles when it walks: the body swings from side to side, as the sisters do (P.wad and P.wadPh come from loop.js)
   { const mu = me.update; me.update = (dt, t) => { mu(dt, t); if (P.mode === 'crawl') { orient(me.q, P.cdir, ZA); me.p.z -= 0.04; me.bank = 0; me.vel = null;
@@ -116,6 +116,10 @@ export function setupThirdPerson() {
 const _meE = new THREE.Euler(0, 0, 0, 'YXZ'), _wq = new Q4();
 const _cp = new V3(), _cb = new V3(), _cd = new V3(), _cz = new V3();
 export let camQuiet = false, camDist = 0;
+// lookcam.js says here if the bee's body is drawn while its camera moves (null: the follow view decides, as before)
+export const VIEW = { vis: null };
+// how far along an offset from the bee the camera can go before something solid is in the way (0..1), as the follow view tests it
+export function camReach(off) { let ok = 0; const N = 10; for (let i = 1; i <= N; i++) { _cp.copy(P.pos).addScaledVector(off, i / N); if (camBlocked(_cp)) break; ok = i / N; } return ok >= 1 ? 1 : Math.max(0, ok - 0.08); }
 function camBlocked(pt) { _cz.copy(pt); camQuiet = true; collide(_cz, _cd.set(0, 0, 0)); camQuiet = false; if (_cz.distanceToSquared(pt) > 0.0025) return true;
   for (const f of flowers) { const d = Math.hypot(pt.x - f.sx, pt.z - f.sz); if (d < f.r * 0.75 + f.len * 0.85 + 0.2 && pt.y < f.y + bloomH(f, d) + 0.25 && pt.y > f.y - 1.6) return true; } return false; }
 export function thirdPerson(dt) {

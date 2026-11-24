@@ -102,7 +102,7 @@ export function updateWasps(dt) {
         tmp.copy(P.pos).sub(w.p).normalize(); P.vel.addScaledVector(tmp, 22); P.vel.y += 7; puff(P.pos, 30, [1.0, 0.8, 0.25], 4, 0.014, 1.4, 2);
         noiseHit(700, 1.5, 0.25, 0.25); sweep(500, 180, 0.4, 0.06, 'sawtooth'); toast(n ? `<b>Stung!</b> the wasp stole ${n} pollen` : '<b>Stung!</b>', 3);
         w.state = 'retreat'; w.t = 0;
-      } else if (!w.decoy && (w.t > 11 || d > 75 || !flying || P.load.length === 0)) { w.state = 'retreat'; w.t = 0; }
+      } else if (!w.decoy && (w.t > 11 || d > 75 || !flying || P.load.length === 0)) { w.state = 'retreat'; w.t = 0; if (P.load.length > 0) G.escapes = (G.escapes || 0) + 1; } // an escape: lookcam.js counts them for danger sense
       if (w.raider) spd = 21;
 
     } else if (w.state === 'retreat') { target = w.home; spd = 14; if (w.t > 7) { w.state = 'patrol'; w.t = 0; } }

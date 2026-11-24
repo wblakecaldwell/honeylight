@@ -57,6 +57,7 @@ export function keysHTML() {
   if (P.mode === 'crawl' || P.mode === 'cell' || P.mode === 'emerge') h += row('W A S D', 'walk the comb') + row('Space', P.wingsReady ? 'take off' : 'take off, once your wings are dry');
   h += row('Mouse', 'look and steer') + row('W', 'fly forward') + row('S', 'slow down, back up') + row('A D', 'drift sideways') + row('Space', 'rise') + row('Shift', 'sink')
     + row('V', G.third ? 'back to bee\'s-eye view' : 'see yourself from behind')
+    + row('B', G.sense ? 'hold to look behind: danger sense finds the nearest wasp' : 'hold to look behind you')
     + row('Q', G.dart ? 'dart: a burst of wing strength' : 'when you grow (30 honey)', !G.dart)
     + row('E', G.leap ? 'leap: spring straight up' : 'when you grow more (65 honey)', !G.leap)
     + row('F', G.heat > 0 ? 'heat buzz: knock wasps out of the air' : 'after a sip of red clover', !(G.heat > 0))

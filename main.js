@@ -31,6 +31,7 @@ import * as highbranch from './src/highbranch.js';
 import * as runworld from './src/runworld.js';
 import * as wear from './src/wear.js';
 import * as wardrobe from './src/wardrobe.js';
+import * as lookcam from './src/lookcam.js';
 
 engine.setupColorSpace();
 world.setupLandmarks();
@@ -115,3 +116,4 @@ highbranch.setupHighBranch();
 runworld.setupRunWorld();
 wear.setupWear();
 wardrobe.setupWardrobe();
+lookcam.setupLookCam();
