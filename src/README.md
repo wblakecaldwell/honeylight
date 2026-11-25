@@ -11,7 +11,7 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `day.js` | The sky, the day from afternoon to dusk, and the day card. |
 | `hive.js` | The hive: the tree shell, the combs, the birth cell and the door. |
 | `bees.js` | The sisters: bodies, hive bees, foragers, the dance, escorts and the bee ball. |
-| `plants.js` | Trees and leaves, the dew path, grass, flowers, mushrooms, and how solid they are. |
+| `plants.js` | Trees and leaves, the dew path, grass (and how it turns see-through near a bee down in it), flowers, mushrooms, and how solid they are. |
 | `places.js` | The ground, pond, orchard, hedge, log, forest edge, brook, branches and the bramble hollow. |
 | `air.js` | Air to ride: warm stones, dew arches, wind, updrafts and petal gusts. |
 | `player.js` | You: state, the body, actions, collisions, third person view and coming home. |
@@ -40,13 +40,14 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `wear.js` | What a bee can wear: the seven pieces of the wardrobe, their models, and how they follow the player's bee. |
 | `lookcam.js` | The camera that moves on its own: look at yourself when you sit still, danger sense (the nearest wasp in the picture), B to look behind, and smooth moves out of and into the bee's eyes and on V. `?look=0` switches it off. |
 | `wardrobe.js` | The wardrobe cell on the comb near the door, its card, and what is earned and worn (saved with the long run). |
+| `pathmarks.js` | What the field mice put up along the long run's track: twig fences and arrow boards at the big bends, and the faint bee-sight lines along the track's edges while racing. `?marks=0` switches them off. |
 | `racemap.js` | The race maps of the long run: three seconds into a run a round map of the ground ahead and an outline of the whole loop fade in, with the start line and, with the whole loop open, the clock and the best loop. |
 
 Outside `src/`: `night.js` (the night: moon, fireflies, the hollow grove), `moonflowers.js` (the moonflower models), `moths.js` and `moth-model.js` (hawk moths from the second night), and `bat.js` and `bat-model.js` (the bat from the third night) are separate on purpose. So is `runnight.js` (fireflies that fall in round a bee on the long run at night; `?runnight=0` switches it off).
 The storm is separate too: `storm.js` (when and where it rains, what rain does to the bee, the rainbow's foot) and `storm-view.js` (what it looks like: rain, the rain front, lightning, the rainbow). It reaches `src/` only through hooks tagged "storm.js".
 Add `?night=0` to the address to switch the night off (moths and bat too); `?moths=0` and `?bat=0` switch off only those. `?storm=0` (or `#storm-off`) switches off the storm, and `#storm-now` starts one soon after you fly out. `index.html` loads `main.js`, the night, the storm and the try-out menu.
 The try-out menu is `stage-menu.js` (a play-test tool: a list that jumps to a stage, a checkbox that opens all zones). It is hidden unless the address has `#menu-on` (or `?menu=1`); to leave it out of a release, remove its line from `index.html`.
-`?racemap=0` switches off the race maps and the clock of the long run.
+`?racemap=0` switches off the race maps and the clock of the long run. `?see=0` keeps the grass from turning see-through round a bee flying low in it (`plants.js`).
 The wardrobe has one play-test switch: `?wardrobe=all` (or `#wardrobe-all`) makes all seven pieces earned for that visit (WRD-012).
 
 ## The rules

@@ -1,6 +1,6 @@
 // Honeylight: the long run. The worn dew track keeps going: one loop round the whole map, through every open zone and back to the meadow.
 // Minigame mode: fly it low, fast and on the track and you get "in the zone". The zone builds in five steps (tiers), each with its own colour.
-// A bail (off the track, too high, too slow, or a bump) drops one tier and the run goes on. Off the track for more than 2 s ends the run.
+// A bail (off the track, too high, too slow, or a bump) drops one tier and the run goes on. Off the track, low in the grass, the grass slows the bee: a slip costs time. The run ends when the bee flies away from the track, or stops on it.
 // Five honeycomb cells at the bottom of the screen show the tiers. A coloured light round the bee (uAura) and a chord grow with them.
 // When the whole loop is open, a challenge line shows after 3 s on the track. Challenges come one at a time, in order (saved in honeylight.run).
 // Each challenge won earns one piece of the wardrobe, in the order of wear.js. What the bee has on is saved with the run (wardrobe.js).
@@ -11,7 +11,7 @@ import { terrainH, terrainBase, WY, POND, ORCH, HEDGE_R, HEDGE_GAPS, HEDGE_TUN, 
 import { scene, mat, U } from './engine.js';
 import { P } from './player.js';
 import { G } from './progress.js';
-import { DEWPATH, grassMesh } from './plants.js';
+import { DEWPATH, grassMesh, seeTwin } from './plants.js';
 import { ZONES, zoneBlocked } from './zones.js';
 import { A, tone, sweep, SCALE } from './audio.js';
 import { clearAt } from './runkit.js';
@@ -19,9 +19,11 @@ import { BURROW, layBurrow, burrowFloor } from './burrow.js';
 import { gardenWay } from './gardenway.js';
 import { WATERWAY } from './waterway.js';
 import { HIGH, HIGHK, layHigh, highNear } from './highbranch.js';
+import { MARKS, layMarks, marksFrame } from './pathmarks.js';
 
 // ---------- numbers to tune ----------
-export const RUNK = { half: 3.6, ceil: 6.0, minSpd: 13, tierT: 8, grace: 2, showGoal: 3, race: 3, bump: 0.35 };
+export const RUNK = { half: 3.6, ceil: 6.0, minSpd: 13, tierT: 8, leave: 14, stall: 2, drag: 1.5, grassTop: 8, showGoal: 3, race: 3, bump: 0.35 };
+// leave: off the track by more than this, the bee has left it and the run ends. stall: on the track but too slow for this long, the run ends. drag: off the track, low in the grass, the grass takes this much of the speed each second
 // race: seconds into a run when the race starts (racemap.js: the maps fade in, the start line is laid where the bee is, the clock starts)
 const SPLIT = 10; // the best loop's time is kept every 10 samples, to tell ahead or behind from any start
 const STEP = 1.2; // track samples are 1.2 apart, like the dew path
@@ -166,7 +168,7 @@ function buildLooks() {
         deal(p, RUN.T[j], r, (x, z) => nearest(x, z).d, (x, z) => clearAt(x, z) >= 1); } }
     const gg = new THREE.InstancedBufferGeometry(); const src = grassMesh.geometry; gg.setAttribute('position', src.attributes.position); gg.setIndex(src.index);
     gg.setAttribute('aOff', new THREE.InstancedBufferAttribute(new Float32Array(off), 3)); gg.setAttribute('aPar', new THREE.InstancedBufferAttribute(new Float32Array(par), 4)); gg.instanceCount = off.length / 3;
-    walls = new THREE.Mesh(gg, grassMesh.material); walls.frustumCulled = false; scene.add(walls); RUN.wallN = gg.instanceCount;
+    walls = new THREE.Mesh(gg, grassMesh.material); walls.frustumCulled = false; scene.add(walls); seeTwin(walls); RUN.wallN = gg.instanceCount;
     // the world's own grass stands short on the track itself (only blade heights change, no random numbers)
     const a = src.attributes.aOff, pa = src.attributes.aPar, n = src.instanceCount;
     for (let i = 0; i < n; i++) { const x = a.getX(i), z = a.getZ(i), nb = nearest(x, z), ck = clearAt(x, z); if (ck < 1) pa.setX(i, pa.getX(i) * Math.max(0.02, ck)); if (nb.i < RUN.dewN || nb.d > 2.6) continue; pa.setX(i, pa.getX(i) * lerp(0.1, 1, clamp((nb.d - 1.4) / 1.2, 0, 1))); }
@@ -178,6 +180,15 @@ function buildLooks() {
   haloMesh.visible = false; haloMesh.frustumCulled = false; haloMesh.renderOrder = 6; scene.add(haloMesh);
   buildHud();
 }
+
+// pathmarks.js: the grass stands short round the mice's fences and boards (only blade heights change, no random numbers)
+function shortNear(pts) { if (!pts.length) return; const C = 4, g = new Map(), key = (x, z) => (Math.floor(x / C) + 1000) * 4000 + Math.floor(z / C) + 1000;
+  pts.forEach(p => { const k = key(p.x, p.z); if (!g.has(k)) g.set(k, []); g.get(k).push(p); });
+  for (const mesh of [grassMesh, walls]) { if (!mesh) continue; const a = mesh.geometry.attributes.aOff, pa = mesh.geometry.attributes.aPar, n = mesh.geometry.instanceCount;
+    for (let i = 0; i < n; i++) { const x = a.getX(i), z = a.getZ(i), cx = Math.floor(x / C), cz = Math.floor(z / C); let hit = false;
+      for (let u = -1; u <= 1 && !hit; u++) for (let v = -1; v <= 1 && !hit; v++) { const l = g.get((cx + u + 1000) * 4000 + cz + v + 1000); if (l) for (const p of l) if (Math.abs(p.x - x) < 1.8 && Math.abs(p.z - z) < 1.8) { hit = true; break; } }
+      if (hit) pa.setX(i, pa.getX(i) * 0.12); }
+    pa.needsUpdate = true; } }
 
 function buildHud() {
   const el = (tag, css, parent = document.body) => { const e = document.createElement(tag); e.style.cssText = css; parent.appendChild(e); return e; };
@@ -206,7 +217,7 @@ export function saveMem() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(
 
 export function setupLongRun() {
   const gameRandom = Math.random; let ids = 52011; Math.random = () => { ids = (ids * 1664525 + 1013904223) >>> 0; return ids / 4294967296; };
-  buildTrack(); layBurrow(RUN.S); layHigh(RUN.S); buildGrid(); buildLooks(); loadMem();
+  buildTrack(); layBurrow(RUN.S); layHigh(RUN.S); buildGrid(); buildLooks(); layMarks(RUN.S, RUN.T, groundAt); shortNear(MARKS.keep); loadMem();
   Math.random = gameRandom;
   updateOpen();
   window.__run = { RUN, RUNK, CHALLENGES, nearest, groundAt, startAuto, stopAuto, reset: () => endRun('reset', true), fmt: fmtTime };
@@ -228,7 +239,7 @@ function placeAuto(dt) { const a = RUN.auto, N = RUN.N; a.s += a.spd * dt / STEP
 
 // ---------- the run itself ----------
 function startRun(i) {
-  Object.assign(RUN, { state: 'run', tier: 0, prog: 0, s: i, s0: i, offT: 0, clean: true, bails: 0, t: 0, goalShown: false, why: '', third: !!G.third, allThird: !!G.third, minPollen: P.pollen, nightStart: !!(window.NIGHT && window.NIGHT.active), hj: -1, hiN: 0, up: false, race: false, raceS: i, raceT: 0, delta: null, newBest: false, cell: -1, cur: null });
+  Object.assign(RUN, { state: 'run', tier: 0, prog: 0, s: i, s0: i, offT: 0, slowT: 0, clean: true, bails: 0, t: 0, goalShown: false, why: '', third: !!G.third, allThird: !!G.third, minPollen: P.pollen, nightStart: !!(window.NIGHT && window.NIGHT.active), hj: -1, hiN: 0, up: false, race: false, raceS: i, raceT: 0, delta: null, newBest: false, cell: -1, cur: null });
   hud.style.opacity = 1; goalEl.style.opacity = 0;
 }
 function endRun(result, quiet = false) {
@@ -282,9 +293,12 @@ export function runFrame(dt) {
       RUN.minPollen = Math.min(RUN.minPollen, P.pollen);
       if (clean) { RUN.offT = 0; RUN.prog += dt; if (RUN.prog >= RUNK.tierT) { if (RUN.tier < 5) { RUN.tier++; tone(CHORD[RUN.tier - 1] * 2, 0.07, 1.6); } RUN.prog = RUN.tier < 5 ? 0 : RUNK.tierT; } }
       else { if (RUN.clean || bumped) bail(!on ? 'off' : !low ? 'high' : !fast ? 'slow' : 'bump'); if (!on || !fast) RUN.offT += dt; else RUN.offT = 0; }
+      RUN.slowT = on && !fast && !bumped ? (RUN.slowT || 0) + dt : 0; // stopped on the track: the run is over after RUNK.stall s (off the track the grass slows the bee, and that does not count)
+      // off the track and down in the grass: the grass holds the bee back, so a slip costs time (it no longer ends the run)
+      if (!on && !up && alt < RUNK.grassTop && Math.abs(groundAt(x, z) - terrainH(x, z)) < 0.05) { const k = Math.max(0, 1 - RUNK.drag * dt); P.vel.x *= k; P.vel.z *= k; }
       RUN.clean = clean;
       if (RUN.race && RUN.full && RUN.cur) splits(N); // a race that began with part of the track open has no clock, even if a zone opens on the way
-      if (RUN.offT > RUNK.grace) endRun('lost');
+      if ((lat > RUNK.leave && nearest(x, z).d > RUNK.leave) || RUN.slowT > RUNK.stall) endRun('lost'); // flown away from the track: the run is over
       else if (RUN.full && RUN.race && RUN.s - RUN.raceS >= N) endRun('done'); // all the way round, back to the line laid when the race started
       else if (!RUN.full && RUN.s >= RUN.stopAt - 4) endRun('stopped');
       else if (RUN.s < RUN.s0 - 20) endRun('lost');
@@ -294,6 +308,7 @@ export function runFrame(dt) {
     }
   } else if (RUN.state === 'ended') { RUN.endT += dt; if (RUN.endT > 3) { hud.style.opacity = 0; goalEl.style.opacity = 0; RUN.state = 'idle'; } }
   RUN.lastSpd = spd;
+  marksFrame(dt, RUN.state === 'run' && RUN.race, RUN.full ? RUN.N + 1 : RUN.stopAt);
   if (RUN.auto) placeAuto(dt);
   look(dt);
 }

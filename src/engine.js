@@ -71,6 +71,9 @@ export function setupShaders() {
   U.uWake = { value: new THREE.Vector4(0, 0, 0, 9) }; U.uWakeD = { value: new THREE.Vector4(0, -1, 14, 5) }; U.uRunWarm = { value: 0 };
   // storm hooks (storm.js): uStorm = (direction x, direction z, where the cloud edge is in the sky, strength 0..1); uStorm2 = (the cloud's far edge, rain mist, gloom under the cloud)
   U.uStorm = { value: new THREE.Vector4(1, 0, 0, 0) }; U.uStorm2 = { value: new V3(0, 0, 0) };
+  // see-through grass (plants.js): uSee = (bee x, y, z, strength 0..1); uSeeD = (look direction x, y, z, how far ahead of the bee). At strength 0 nothing changes
+  U.uSee = { value: new THREE.Vector4(0, 0, 0, 0) }; U.uSeeD = { value: new THREE.Vector4(0, 0, -1, 8) };
+  U.uRace = { value: 0 }; // pathmarks.js: how far the bee-sight lines along the long run's track have faded in (0 when not racing)
   COMMON = `
 uniform float uTime; uniform vec3 uCam; uniform vec3 uSun; uniform float uGlow; uniform highp sampler2DShadow uShadow; uniform mat4 uShadowM; uniform float uShadowOn; uniform vec3 uSunC; uniform float uAmb; uniform vec3 uHaze; uniform float uNight; uniform vec4 uLamp; uniform vec3 uLampC; uniform float uMapView; uniform vec4 uAura; uniform vec3 uAuraC; uniform vec4 uStorm; uniform vec3 uStorm2;
 varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL;

@@ -45,7 +45,7 @@ module.exports = [
       t.eq([r.t7, r.t8, r.t16, r.t44], [0, 1, 2, 5], 'a tier every 8 s, capped at 5'); t.eq(r.bails, 0, 'no bails'); t.eq(r.state, 'run', 'still running');
       return r;
     } },
-  { id: 'RUN-004-bail', req: 'RUN-004', name: 'A bail (off, high, slow or a bump) drops one tier and the run goes on; off for more than 2 s ends it',
+  { id: 'RUN-004-bail', req: 'RUN-004', name: 'A bail (off, high, slow or a bump) drops one tier and the run goes on; off the track it goes on (it costs time), flying away from the track ends it',
     async run(t) {
       const r = await t.ev(([allOpen, ride]) => { eval(allOpen)(); const go = eval(ride), R = __run.RUN, A = () => R.auto, out = {};
         go({ i: 2, spd: 22 }, 24.5); out.start = R.tier;
@@ -53,13 +53,13 @@ module.exports = [
         A().alt = 8; T.sim(0.5); A().alt = 1.4; T.sim(0.5); out.high = [R.tier, R.state, R.why];
         A().spd = 8; T.sim(0.5); A().spd = 22; T.sim(0.5); out.slow = [R.tier, R.state, R.why];
         R.lastSpd = 40; T.sim(1 / 60); out.bump = [R.tier, R.state, R.why]; out.bails = R.bails;
-        A().lat = 6; T.sim(2.5); out.lost = [R.state, R.result]; return out; }, [allOpen, ride]);
+        A().lat = 6; T.sim(2.5); out.stays = R.state; A().lat = 20; T.sim(0.2); out.lost = [R.state, R.result]; return out; }, [allOpen, ride]);
       t.eq(r.start, 3, 'at tier 3 after 24 s');
       t.eq(r.off, [2, 'run', 'off'], 'off the track: one tier down, still running');
       t.eq(r.high, [1, 'run', 'high'], 'too high: one tier down');
       t.eq(r.slow, [0, 'run', 'slow'], 'too slow: one tier down');
       t.eq(r.bump, [0, 'run', 'bump'], 'a bump counts as a bail too (no tier left to lose)'); t.eq(r.bails, 4, 'four bails counted');
-      t.eq(r.lost, ['ended', 'lost'], 'off the track for more than 2 s ends the run');
+      t.eq(r.stays, 'run', 'off the track for 2.5 s: the run goes on'); t.eq(r.lost, ['ended', 'lost'], 'flown away from the track: the run ends');
       return r;
     } },
   { id: 'RUN-005-closed', req: 'RUN-005', name: 'With the zones closed the run stops at the walled garden: the trail is overgrown, and no challenge shows',
@@ -76,7 +76,7 @@ module.exports = [
         const fills = () => [...hud.children].map(c => parseFloat(c.firstChild.firstChild.style.height));
         T.fly(0, 0, 0); T.sim(0.2); out.idle = hud.style.opacity; go({ i: 2, spd: 22 }, 12); out.run = hud.style.opacity; out.fills = fills();
         R.auto.lat = 5; T.sim(0.3); const o = []; for (let k = 0; k < 8; k++) { T.sim(1 / 60); o.push(hud.children[0].style.opacity); } out.flicker = new Set(o).size > 1;
-        R.auto.lat = 6; T.sim(2.5); T.sim(3.5); out.after = hud.style.opacity; out.n = hud.children.length; return out; }, [allOpen, ride]);
+        R.auto.lat = 20; T.sim(2.5); T.sim(3.5); out.after = hud.style.opacity; out.n = hud.children.length; return out; }, [allOpen, ride]);
       t.eq(r.n, 5, 'five cells'); t.eq(r.idle, '0', 'hidden when not running'); t.eq(r.run, '1', 'shown during a run');
       t.eq(r.fills[0], 100, 'tier 1 cell full'); t.check(r.fills[1] > 40 && r.fills[1] < 60, 'tier 2 cell half full after 12 s: ' + r.fills[1]); t.eq(r.fills.slice(2), [0, 0, 0], 'the rest empty');
       t.eq(r.flicker, true, 'the cells flicker off the track'); t.eq(r.after, '0', 'hidden again after the run');
@@ -88,7 +88,7 @@ module.exports = [
         T.fly(0, 0, 0); T.sim(0.5); out.idle = U.uAura.value.w; go({ i: 2, spd: 22 }, 10); out.t1 = U.uAura.value.w; out.c1 = U.uAuraC.value.toArray().map(v => +v.toFixed(2));
         T.sim(16); out.t3 = U.uAura.value.w; out.c3 = U.uAuraC.value.toArray().map(v => +v.toFixed(2)); out.near = __g.P.pos.distanceTo(new __g.THREE.Vector3(U.uAura.value.x, U.uAura.value.y, U.uAura.value.z)) < 1.5;
         __g.G.third = true; T.sim(0.2); out.halo = __g.scene.children.some(o => o.visible && o.material && o.material.uniforms && o.material.uniforms.uC);
-        R.auto.lat = 6; T.sim(2.4); T.sim(3); out.after = U.uAura.value.w; return out; }, [allOpen, ride]);
+        R.auto.lat = 20; T.sim(2.4); T.sim(3); out.after = U.uAura.value.w; return out; }, [allOpen, ride]);
       t.eq(r.idle, 0, 'no light out of the zone'); t.check(r.t1 > 0.5, 'light at tier 1: ' + r.t1); t.check(r.t3 > r.t1 * 1.5, 'brighter at tier 3: ' + r.t3);
       t.check(r.c1[0] > 0.9 && r.c1[2] < 0.4, 'gold at tier 1: ' + r.c1); t.check(r.c3[2] > 0.9 && r.c3[0] < 0.8, 'lavender at tier 3: ' + r.c3);
       t.eq(r.near, true, 'the light is at the bee'); t.eq(r.halo, true, 'a glow round the bee in follow view'); t.eq(r.after, 0, 'out after the run');

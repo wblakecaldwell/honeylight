@@ -10,7 +10,7 @@ module.exports = [
         const state = () => ({ wake: U.uWake.value.z, warm: U.uRunWarm.value, wave: W.wave, open: W.budsOpen, petals: W.petals, sparks: W.sparks, dew: W.dew, shown: G.scene.children.filter(o => o.visible && /runworld/.test(o.userData.rw || '')).length });
         T.fly(0, 0, 0); T.quiet(); T.sim(2); out.idle = state();
         const R = eval(ride)(5, 3); out.top = state();
-        R.auto.lat = 6; T.sim(2.6); out.result = R.result; T.sim(12); out.after = state(); return out; }, [allOpen, ride]);
+        R.auto.lat = 20; T.sim(2.6); out.result = R.result; T.sim(12); out.after = state(); return out; }, [allOpen, ride]);
       const zero = { wake: 0, warm: 0, wave: 0, open: 0, petals: 0, sparks: 0, dew: 0, shown: 0 };
       t.eq(r.idle, zero, 'no run: everything off, nothing shown');
       t.check(r.top.wake > 0.9 && r.top.warm > 0 && r.top.open > 3 && r.top.petals > 5 && r.top.sparks > 0 && r.top.dew > 5 && r.top.shown === 3, 'at the top tier all of it is on: ' + JSON.stringify(r.top));
@@ -78,7 +78,7 @@ module.exports = [
         const R = eval(ride)(0, 2); out.t0 = N.runFlies; R.tier = 2; T.sim(5); out.t2 = N.runFlies;
         const P = __g.P, RN = N.runNight; out.near = RN.F.filter(q => q.role === 2).every(q => q.p.distanceTo(P.pos) < 9); out.ahead = RN.F.filter(q => q.role === 2 && (q.p.x - P.pos.x) * P.vel.x + (q.p.z - P.pos.z) * P.vel.z > 0).length;
         R.lastSpd = 40; T.sim(1 / 60); out.bail = [R.tier, R.why]; T.sim(0.5); out.afterBail = N.runFlies;
-        R.auto.lat = 6; T.sim(2.6); out.result = R.result; out.ended = N.runFlies; T.sim(4); out.gone = RN.count(0); return out; }, [allOpen, ride]);
+        R.auto.lat = 20; T.sim(2.6); out.result = R.result; out.ended = N.runFlies; T.sim(4); out.gone = RN.count(0); return out; }, [allOpen, ride]);
       if (r.off) { t.eq(r.state, 'run', 'with the night off the run goes on without fireflies'); return r; }
       t.eq(r.t0, 0, 'none below the first tier'); t.eq(r.t2, 6, 'six at the second tier');
       t.eq(r.near, true, 'they fly round the bee'); t.check(r.ahead >= 1, 'a few beside and just ahead, seen from the bee\'s eyes: ' + r.ahead);

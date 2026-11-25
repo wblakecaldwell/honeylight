@@ -1,4 +1,4 @@
-// Honeylight: trees and leaves, the dew path, grass, flowers, mushrooms, and how solid they are.
+// Honeylight: trees and leaves, the dew path, grass (and how it turns see-through near a bee down in it), flowers, mushrooms, and how solid they are.
 import * as THREE from '../three.module.min.js';
 import { M4, Q4, V3, rnd, clamp, lerp, smooth, TAU } from './core.js';
 import { ROUT, POND, WY, FDIR, FIELD_D, srnd, HEDGE_R, ORCH, HILLS, BROOK, HOLLOW, brookD, hollowRootD, terrainH, LOG,
@@ -117,17 +117,52 @@ export function dewPathD(x, z) { const b = DEWPATH.box; if (x < b[0] || x > b[1]
 const WAKEGLSL = `if(uWake.z>0.0){ vec2 rel=aOff.xz-uWake.xy, wd=uWakeD.xy; float al=dot(rel,wd); vec2 sv=rel-wd*al; float sl=length(sv);
     float wk=uWake.z*smoothstep(-uWakeD.w,0.0,al)*(1.0-smoothstep(uWakeD.z*0.45,uWakeD.z,al))*(1.0-smoothstep(uWake.w*0.45,uWake.w,sl));
     w.xz+=(sv/max(sl,0.05)*0.9+wd*0.3)*wk*y*y*h*0.55; w.y-=wk*y*y*h*0.2; }`;
+
+// see-through grass: blades between the eye and the bee, and just ahead of the bee, fade to mostly clear, so a bee off the track can still see it.
+// Pass 0 (the grass as always) leaves those pixels out; pass 1 (a twin mesh drawn after, see-through) draws only them.
+export const SEEK = { r0: 1.2, r1: 3.6, clear: 0.93, ahead: 8, reach: 30 };
+const SEEGLSL = `uniform vec4 uSee; uniform vec4 uSeeD;
+float seeF(vec3 p){ if(uSee.w<=0.0 || uMapView>0.5) return 0.0; vec3 b=uSee.xyz+uSeeD.xyz*uSeeD.w, ab=b-uCam; float t=clamp(dot(p-uCam,ab)/max(dot(ab,ab),1e-4),0.0,1.0);
+  return uSee.w*(1.0-smoothstep(SEE_R0,SEE_R1,length(p-uCam-ab*t))); }
+`;
+const seeDefs = pass => ({ SEE_PASS: pass, SEE_R0: SEEK.r0.toFixed(2), SEE_R1: SEEK.r1.toFixed(2), SEE_CLEAR: SEEK.clear.toFixed(2) });
+// the two passes in a fragment shader: call at the start (after vW is known) and wrap the final colour
+const SEE_IN = `float seeA=seeF(vW);
+#if SEE_PASS == 0
+  if(seeA>0.004) discard;
+#else
+  if(seeA<=0.004) discard;
+#endif
+`;
+const SEE_OUT = c => `
+#if SEE_PASS == 0
+  gl_FragColor=vec4(${c},1.0);
+#else
+  gl_FragColor=vec4(${c},1.0-SEE_CLEAR*seeA);
+#endif
+`;
+// pass 1 vertex shader: blades far from the bee are dropped at once
+const SEE_VERT = `
+#if defined(SEE_PASS) && SEE_PASS == 1
+  if(uSee.w<=0.0 || distance(aOff.xz,uSee.xz)>${SEEK.reach.toFixed(1)}){ gl_Position=vec4(2.0,2.0,2.0,1.0); return; }
+#endif
+`;
+// the see-through twin of a grass mesh: same blades, drawn after the rest. three.js takes a random id for each new object,
+// so it is made on a stream of its own: the game's random numbers, and so the whole world, stay as they were
+export function seeTwin(mesh) { if (!MP) return null; const game = Math.random; let s = 77017 + mesh.geometry.instanceCount;
+  Math.random = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  try { const t = new THREE.Mesh(mesh.geometry, GRASS_MP(1)); t.frustumCulled = false; t.renderOrder = 3; t.userData.noShadow = true; scene.add(t); return t; } finally { Math.random = game; } }
 // model pass grass: tufts of three slim, twisting blades with a midrib, dry tips and the odd seed spike
-function GRASS_MP() { return mat(`varying float vH; varying float vT; varying float vSeed; varying float vR;
-void main(){ vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015);
+function GRASS_MP(pass = 0) { return mat(SEEGLSL + `varying float vH; varying float vT; varying float vSeed; varying float vR;
+void main(){ ${SEE_IN} vec3 n=NORMAL; float patchy=fbm(vW.xz*0.015);
   vec3 tipc=mix(vec3(0.30,0.50,0.09),vec3(0.46,0.50,0.16),smoothstep(0.45,0.7,patchy));
   vec3 alb=mix(vec3(0.025,0.08,0.015),tipc,smoothstep(0.0,0.75,vH))*vT*(0.85+0.3*vR);
   alb*=0.8+0.32*(1.0-smoothstep(0.0,0.14,abs(vL.x)));
   float dry=smoothstep(0.8,1.0,vH)*step(0.5,vR); alb=mix(alb,vec3(0.52,0.44,0.20),dry*0.7);
   alb=mix(alb,vec3(0.50,0.42,0.22)*(0.75+0.5*vnoise(vec2(vL.x*9.0,vH*60.0))),vSeed*smoothstep(0.5,0.6,vH));
-  gl_FragColor=vec4(finish(shade(alb,n,vW,0.3*vH,0.9),vW),1.0); }`, { side: THREE.DoubleSide, vert: HASH + `
-attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; uniform vec4 uWake; uniform vec4 uWakeD; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT; varying float vSeed; varying float vR;
-void main(){ float bi=position.z, y=position.y, sd=position.x;
+  vec3 col=finish(shade(alb,n,vW,0.3*vH,0.9),vW); ${SEE_OUT('col')} }`, { side: THREE.DoubleSide, defines: seeDefs(pass), transparent: pass === 1, depthWrite: pass === 0, vert: HASH + `
+attribute vec3 aOff; attribute vec4 aPar; uniform float uTime; uniform vec4 uWake; uniform vec4 uWakeD; uniform vec4 uSee; varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec2 vUv; varying vec3 vL; varying float vH; varying float vT; varying float vSeed; varying float vR;
+void main(){ ${SEE_VERT} float bi=position.z, y=position.y, sd=position.x;
   float r1=ihash21(vec2(aPar.z,bi)), r2=fract(r1*91.7+bi*0.37);
   float seed=step(bi,0.5)*step(fract(aPar.z*3.71),0.07);
   float h=aPar.x*(0.65+0.45*r1)*(1.0+0.35*seed);
@@ -170,7 +205,7 @@ export function setupGrass() {
       ${WAKEGLSL}
       vW=w; vL=position; vC=vec3(1.0); vUv=vec2(0.0); vN=normalize(vec3(-s*0.7,0.5+y*0.4,c*0.7)); vH=y; vT=aPar.w;
       gl_Position=projectionMatrix*viewMatrix*vec4(w,1.0); }` });
-    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; scene.add(mesh); grassMesh = mesh;
+    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; scene.add(mesh); grassMesh = mesh; seeTwin(mesh);
   }
 }
 

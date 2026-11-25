@@ -5,7 +5,7 @@ import { camera, U, parts, pNext, puff, updateParts, renderFrame, adaptRes } fro
 import { sky, flowersClosed, dayCount, updateDay } from './day.js';
 import { COMBS, BIRTH, combUniforms, capPieces, beacon } from './hive.js';
 import { _q, _v, YA, orient, DANCE, greeters, hero, updateBees, streakU, trailU, beeCollide, updateSwarm } from './bees.js';
-import { flowers, shrooms, flowerHit, shroomSolid } from './plants.js';
+import { flowers, shrooms, flowerHit, shroomSolid, SEEK } from './plants.js';
 import { pads, fish, updateBranches, updateBrook } from './places.js';
 import { WIND, updateWind, airForces, updateAirLife, updateGusts } from './air.js';
 import { ants, baskets, P, look, takeOff, rebirth, PR, collide, thirdPerson, updateAimShadow, updateHome,
@@ -26,6 +26,7 @@ import { waterwayFrame } from './waterway.js';
 import { updateRunWorld } from './runworld.js';
 import { wardrobeWalk, updateWardrobe } from './wardrobe.js';
 import { updateLookCam } from './lookcam.js';
+const _see = new V3(), SEE_OFF = /see=0/.test(location.search); // ?see=0: the grass is never see-through
 
 // ---------- main loop ----------
 export const fwd = new V3(), right = new V3(), acc = new V3(), tmp = new V3(), camPos = new V3();
@@ -147,6 +148,8 @@ export function update(dt) {
   camera.position.copy(camPos); camera.rotation.set(P.pitch + (G.third ? 0 : GW.pitch), P.yaw, P.roll + (G.third ? 0 : GW.roll)); viewBlend(); camera.updateMatrixWorld(); thirdPerson(dt); updateLookCam(dt); // lookcam.js: look at yourself, danger sense, B; gaps.js: in the bee's eyes the tumble turns the view; in follow view only the bee turns
   const spd = P.vel.length(); fov = lerp(fov, 74 + Math.min(9, spd * 0.3), Math.min(1, dt * 3)); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   U.uCam.value.copy(camPos); sky.position.copy(camPos);
+  { const lowF = P.mode === 'fly' && !SEE_OFF ? 1 - clamp((P.pos.y - terrainH(P.pos.x, P.pos.z) - 12) / 6, 0, 1) : 0; camera.getWorldDirection(_see); // plants.js: see-through grass round a bee down in it
+    U.uSee.value.set(P.pos.x, P.pos.y, P.pos.z, lowF); U.uSeeD.value.set(_see.x, _see.y, _see.z, SEEK.ahead); }
   ants.forEach((a, i) => { const s = i ? -1 : 1; a.rotation.x = Math.sin(time * 1.7 + i) * 0.05 + clamp(spd * 0.012, 0, 0.3) + (P.mode === 'cell' ? Math.sin(time * 6 + i * 2) * 0.05 : 0); a.rotation.y = s * (Math.sin(time * 1.3 + i * 2) * 0.06) + P.yawRate * 3; });
   const bs = P.pollen ? 0.5 + P.pollen * 0.22 : 0.001; baskets.forEach(b => b.scale.setScalar(lerp(b.scale.x, bs, Math.min(1, dt * 4))));
 
