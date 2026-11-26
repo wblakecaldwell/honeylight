@@ -115,7 +115,7 @@ export function updateRunWorld(dt) {
   // the little flowers: those just ahead spring up and open, those left behind fold and sink back into the grass
   { const on = running && t >= RWK.budTier && !RUN.up;
     if (on || budLive) { const N = RUN.N, s = RUN.s, ahead = RWK.budAhead / STEP, behind = RWK.budBehind / STEP; let live = 0, open = 0;
-      for (let i = 0; i < budO.length; i++) { let d = ((budJ[i] - s) % N + N) % N; if (d > N / 2) d -= N;
+      for (let i = 0; i < budO.length; i++) { let d = (((budJ[i] - s) * (RUN.dir || 1)) % N + N) % N; if (d > N / 2) d -= N; /* ahead the way the run goes */
         const want = on && d > -behind && d < ahead, o = budO[i], k = want ? Math.min(1, o + dt * RWK.budPop) : Math.max(0, o - dt * RWK.budFold);
         budO[i] = k; if (k > 0) live++; if (k > 0.9) open++; }
       budLive = live > 0; W.budsOpen = open; budMesh.geometry.attributes.aO.needsUpdate = true; }

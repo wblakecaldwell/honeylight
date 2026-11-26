@@ -41,7 +41,7 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `lookcam.js` | The camera that moves on its own: look at yourself when you sit still, danger sense (the nearest wasp in the picture), B to look behind, and smooth moves out of and into the bee's eyes and on V. `?look=0` switches it off. |
 | `wardrobe.js` | The wardrobe cell on the comb near the door, its card, and what is earned and worn (saved with the long run). |
 | `pathmarks.js` | What the field mice put up along the long run's track: twig fences and arrow boards at the big bends, and the faint bee-sight lines along the track's edges while racing. `?marks=0` switches them off. |
-| `racemap.js` | The race maps of the long run: three seconds into a run a round map of the ground ahead and an outline of the whole loop fade in, with the start line and, with the whole loop open, the clock and the best loop. |
+| `racemap.js` | The race maps of the long run: a moment into a run a round map of the ground ahead and an outline of the whole loop fade in, with the start line and, with the whole loop open, the clock and the best loop. |
 
 Outside `src/`: `night.js` (the night: moon, fireflies, the hollow grove), `moonflowers.js` (the moonflower models), `moths.js` and `moth-model.js` (hawk moths from the second night), and `bat.js` and `bat-model.js` (the bat from the third night) are separate on purpose. So is `runnight.js` (fireflies that fall in round a bee on the long run at night; `?runnight=0` switches it off).
 The storm is separate too: `storm.js` (when and where it rains, what rain does to the bee, the rainbow's foot) and `storm-view.js` (what it looks like: rain, the rain front, lightning, the rainbow). It reaches `src/` only through hooks tagged "storm.js".

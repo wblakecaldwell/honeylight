@@ -1,6 +1,6 @@
 // Honeylight: what the field mice put up along their road (the long run's track), so their friends can run it fast.
-// At each big bend: a low fence of twigs woven between stakes on the outside of the bend, and two small boards of birch bark
-// behind it with an arrow painted in berry juice, pointing the way the track turns. Nothing stands over the track itself.
+// At each bend: a low fence of twigs woven between stakes on the outside of the bend. At each big bend also small boards of birch bark behind it,
+// two facing each way round the loop, each with an arrow painted in berry juice on the side that faces a bee coming in, pointing the way it turns (the back is plain wood). Nothing stands over the track itself.
 // Bee sight: while the bee is racing (RUN-026), faint ultraviolet lines show along the edges of the track, like the nectar guides
 // that flowers paint for bees. They fade in when the race starts and out when the run ends; at any other time they are not drawn.
 // Self-contained: built on a random stream of its own (quietBuild), so the rest of the world stays as it was.
@@ -12,9 +12,9 @@ import { addStick, addBlock } from './solids.js';
 
 // ---------- numbers to tune ----------
 export const MARKK = {
-  bendW: 9, bendDeg: 45, // a big bend: the track turns at least 45 degrees between 9 samples before and 9 after
+  bendW: 9, bendDeg: 28, boardDeg: 45, // a bend: the track turns at least 28 degrees between 9 samples before and 9 after; it gets a fence. A big bend (45 or more) gets the boards too
   fenceLat: 3.85, fenceLen: 10, fenceH: 1.5, // the fence: how far from the middle of the track (outside "on the track", RUNK.half), how many samples each way, how high
-  boardLat: 4.25, boardW: 1.0, boardH: 1.15, boardAt: [-3, 3], // the boards: behind the fence, at these samples from the bend
+  boardLat: 4.25, boardW: 1.0, boardH: 1.15, boardAt: [-4, 2], // the boards: behind the fence, at these samples from the bend for a bee going the first way round; mirrored (4, -2) for the other way
   lineLat: 2.5, lineW: 0.09, lineK: 0.32, lineFar: 32, // bee sight: where the lines are, how wide, how bright, how far ahead they fade out
   fadeIn: 1.2, fadeOut: 0.8, // seconds
 };
@@ -54,9 +54,12 @@ function layBend(b, S, T, ground, tw, bd) {
     tw.push({ g: lumpTube(pts, 0.075, 0.06, b.i + row, 5, 0.08), c: [1, 0.7 + 0.3 * r(), 1] }); }
   for (let k = 1; k < posts.length; k++) { const a = posts[k - 1].p, e = posts[k].p; for (const h of [0.45, 1.05]) addStick(new V3(a.x, a.y + h, a.z), new V3(e.x, e.y + h, e.z), 0.42, 'fence'); }
   // the boards, upright, facing a bee coming into the bend, each on a stake
-  for (const k of K.boardAt) { const i = (b.i + k + N) % N, q = side(i, K.boardLat), tin = T[(i - 10 + N) % N], g = ground(q.x, q.z), y = g + 2.0 + r(-0.1, 0.1), yaw = Math.atan2(tin.x, tin.z) + Math.PI;
+  // the track can be flown either way round: one pair of boards faces each way, each with the arrow for a bee coming from that side
+  const pairs = Math.abs(b.deg) >= K.boardDeg ? [...K.boardAt.map(k => [k, 1]), ...K.boardAt.map(k => [-k, -1])] : [];
+  for (const [k, dir] of pairs) { const i = (b.i + k + N) % N, q = side(i, K.boardLat), tin = T[(i - 10 * dir + N) % N].clone().multiplyScalar(dir), g = ground(q.x, q.z), y = g + 2.0 + r(-0.1, 0.1), yaw = Math.atan2(tin.x, tin.z) + Math.PI;
     const m = new THREE.Matrix4().compose(new V3(q.x, y, q.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, r(-0.04, 0.04), 'YXZ')), new V3(1, 1, 1));
-    bd.push({ g: new THREE.BoxGeometry(K.boardW, K.boardH, 0.1), m, c: [out < 0 ? 1 : 0, 1, 1] }); MARKS.keep.push(q);
+    tw.push({ g: new THREE.BoxGeometry(K.boardW, K.boardH, 0.1), m, c: [1, 1.15, 1] }); // the board itself, plain wood all round
+    const face = new THREE.PlaneGeometry(K.boardW * 0.96, K.boardH * 0.96); face.translate(0, 0, 0.052); bd.push({ g: face, m, c: [(out < 0) === (dir > 0) ? 1 : 0, 1, 1] }); MARKS.keep.push(q); // the bark face with the arrow, toward the bee coming in
     addBlock(new V3(q.x, y, q.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), [K.boardW / 2, K.boardH / 2, 0.08], 'board');
     const a = new V3(q.x, g - 0.3, q.z), e = new V3(q.x + r(-0.04, 0.04), y + K.boardH * 0.2, q.z + r(-0.04, 0.04)); tw.push({ g: rodGeo(a, e, 0.1, 0.07), c: [1, 0.9, 1] }); addStick(a, e, 0.1, 'fence'); }
 }

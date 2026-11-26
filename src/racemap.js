@@ -1,4 +1,4 @@
-// Honeylight: the race maps of the long run. Three seconds into a run the race starts: a round map of the ground just ahead and an outline of the whole loop fade in,
+// Honeylight: the race maps of the long run. A moment into a run the race starts: a round map of the ground just ahead and an outline of the whole loop fade in,
 // both turned so the way the bee looks is up. A line marks where the race started. With the whole loop open a clock runs, with the best loop and ahead or behind.
 // With part of the track open there is no clock, and no map past the open track or over closed places.
 // The round map is a picture of the world from straight above, drawn once, the first time a map shows (bake). It takes no number from the game's random stream.
@@ -46,7 +46,7 @@ export function raceMapFrame() {
     const now = document.getElementById('racenow'), dl = document.getElementById('racedelta'), be = document.getElementById('racebest'), m = RUN.mem;
     now.textContent = fmtTime(RUN.raceT);
     if (RUN.delta !== null && RUN.state === 'run') { const d = RUN.delta; dl.textContent = (d < 0 ? '−' : '+') + Math.abs(d).toFixed(1); dl.style.color = d < 0 ? '#bff0a4' : '#ffb38f'; } else dl.textContent = '';
-    be.textContent = m.best ? 'best  ' + fmtTime(m.best) : '';
+    const best = RUN.dir < 0 ? m.bestR : m.best; be.textContent = best ? 'best  ' + fmtTime(best) : ''; // each way round has its own best
     be.style.color = RUN.newBest ? '#ffd36a' : 'rgba(255,243,214,.85)'; be.style.textShadow = RUN.newBest ? '0 0 10px rgba(255,190,60,.9), 0 1px 6px rgba(0,0,0,.75)' : '';
   }
 }
@@ -93,10 +93,10 @@ export function draw() {
   if (!MAP.baked && ++MAP.frames > 30) bake(); // in the game the picture is drawn early, while nothing is going on yet
   if (!MAP.shown && MAP.cv.style.opacity === '0') return;
   if (!MAP.baked) bake();
-  const s = H / 750, N = RUN.N, fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), rx = -fz, rz = fx, bi = RUN.s;
+  const s = H / 750, N = RUN.N, fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), rx = -fz, rz = fx, bi = RUN.s, dir = RUN.dir || 1;
   // world to screen, turned so that the way the bee looks is up
   const to = (cx, cy, k, wx, wz) => (px, pz) => { const dx = px - wx, dz = pz - wz; return [cx + (dx * rx + dz * rz) * k, cy - (dx * fx + dz * fz) * k]; };
-  const ahead = i => ((i - bi) % N + N) % N < N / 2;
+  const ahead = i => ((dir * (i - bi)) % N + N) % N < N / 2; // ahead the way this run goes
   // ---- the round map ----
   const R = Math.round(Math.min(H * MAPK.circle, W * 0.2)), ccx = 28 * s + R, ccy = H - 28 * s - R, k = R / MAPK.reach;
   const wcx = P.pos.x + fx * MAPK.ahead, wcz = P.pos.z + fz * MAPK.ahead, T1 = to(ccx, ccy, k, wcx, wcz);

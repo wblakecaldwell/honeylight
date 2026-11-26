@@ -1,4 +1,4 @@
-// The race maps and the clock of the long run (src/racemap.js, src/longrun.js): the race starts 3 s into a run, the maps, the start line, the clock and the best loop.
+// The race maps and the clock of the long run (src/racemap.js, src/longrun.js): the race starts a moment (1 s) into a run, the maps, the start line, the clock and the best loop.
 // __run.startAuto rides the track exactly (a test autopilot). __racemap.draw() draws the maps as a frame of the game would (frames do not run in the tests).
 const allOpen = `() => { const G = __g; for (const k in G.ZONES) G.G.zones[k] = true; G.G.orchard = true; }`;
 const ride = `(o, secs) => { T.fly(0, 0, 0); T.quiet(); __run.startAuto(o); T.sim(secs); return __run.RUN.state; }`;
@@ -7,16 +7,16 @@ const seen = `() => ({ map: document.getElementById('racemap').style.opacity, cl
 // how many white pixels the outline drew (its corner of the maps' canvas)
 const outlineInk = `() => { __racemap.draw(); const c = document.getElementById('racemap'), x = c.getContext('2d'), w = c.width, h = c.height, d = x.getImageData(Math.round(w * 0.6), 0, w - Math.round(w * 0.6), Math.round(h * 0.45)).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 230 && d[i + 1] > 230 && d[i + 2] > 230 && d[i + 3] > 200) n++; return n; }`;
 module.exports = [
-  { id: 'RUN-026-race-start', req: 'RUN-026', name: 'A run starts anywhere on the open track; 3 s in, the race starts where the bee is and the maps fade in',
+  { id: 'RUN-026-race-start', req: 'RUN-026', name: 'A run starts anywhere on the open track; a moment later the race starts where the bee is and the maps fade in',
     async run(t) {
       const r = await t.ev(([allOpen, ride, seen]) => { eval(allOpen)(); const go = eval(ride), see = eval(seen), R = __run.RUN, out = {};
         out.idle = see(); go({ i: 700, spd: 22 }, 0.5); out.start = [R.state, R.s0]; out.early = see(); out.raceEarly = R.race;
         T.sim(2.6); out.race = R.race; out.at = Math.round(R.raceS); out.s = Math.round(R.s); out.mid = see(); return out; }, [allOpen, ride, seen]);
       t.eq(r.idle.map, '0', 'no maps without a run');
       t.eq(r.start[0], 'run', 'a run starts in the middle of the track'); t.check(r.start[1] >= 700 && r.start[1] < 712, 'where the bee joined it: ' + r.start[1]);
-      t.eq([r.raceEarly, r.early.map, r.early.clock], [false, '0', '0'], 'no race and no maps in the first 3 s');
-      t.eq(r.race, true, 'the race has started'); t.check(r.at > r.start[1] + 40 && r.at <= r.s, 'its start line is where the bee was 3 s in: ' + r.at);
-      t.eq([r.mid.map, r.mid.clock], ['1', '1'], 'the maps and the clock show'); t.check(/^0:00\.\d$/.test(r.mid.now), 'the clock runs from the start line: ' + r.mid.now);
+      t.eq([r.raceEarly, r.early.map, r.early.clock], [false, '0', '0'], 'no race and no maps in the first moment');
+      t.eq(r.race, true, 'the race has started'); t.check(r.at > r.start[1] + 10 && r.at <= r.s, 'its start line is where the bee was when the race started: ' + r.at);
+      t.eq([r.mid.map, r.mid.clock], ['1', '1'], 'the maps and the clock show'); t.check(/^0:0[0-2]\.\d$/.test(r.mid.now), 'the clock runs from the start line: ' + r.mid.now);
       return r;
     } },
   { id: 'RUN-029-clock', req: 'RUN-029', name: 'A loop ends at its own start line; the first loop sets the best quietly; a faster loop is a new best, saved; ahead or behind shows',

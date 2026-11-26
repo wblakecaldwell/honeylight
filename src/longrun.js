@@ -22,7 +22,9 @@ import { HIGH, HIGHK, layHigh, highNear } from './highbranch.js';
 import { MARKS, layMarks, marksFrame } from './pathmarks.js';
 
 // ---------- numbers to tune ----------
-export const RUNK = { half: 3.6, ceil: 6.0, minSpd: 13, tierT: 8, leave: 14, stall: 2, drag: 1.5, grassTop: 8, showGoal: 3, race: 3, bump: 0.35 };
+export const RUNK = { half: 3.6, ceil: 6.0, minSpd: 13, tierT: 8, leave: 14, stall: 2, drag: 1.5, grassTop: 8, joinSpd: 6, join: 0.4, showGoal: 3, race: 1, bump: 0.35 };
+// joining: on the track, no higher than the grass (grassTop), flying along it faster than joinSpd for join s starts a run; the race (lines, maps, clock) starts race s later.
+// The zone's tiers still ask more: under ceil and faster than minSpd
 // leave: off the track by more than this, the bee has left it and the run ends. stall: on the track but too slow for this long, the run ends. drag: off the track, low in the grass, the grass takes this much of the speed each second
 // race: seconds into a run when the race starts (racemap.js: the maps fade in, the start line is laid where the bee is, the clock starts)
 const SPLIT = 10; // the best loop's time is kept every 10 samples, to tell ahead or behind from any start
@@ -41,7 +43,7 @@ export const CHALLENGES = [
 ];
 const SAVE_KEY = 'honeylight.run';
 
-export const RUN = { S: [], T: [], zone: [], K: [], own: [], first: { S: [], T: [], keep: [], N: 0 }, N: 0, dewN: 0, state: 'idle', tier: 0, prog: 0, s: 0, s0: 0, offT: 0, clean: false, bails: 0, t: 0, endT: 0, result: '', stopAt: 1e9, open: 0, mem: { ch: 0, best: 0, bestAt: null, worn: [], seen: 0 }, race: false, raceS: 0, raceT: 0, delta: null, newBest: false, auto: null, lastSpd: 0, goalShown: false, why: '' };
+export const RUN = { dir: 1, S: [], T: [], zone: [], K: [], own: [], first: { S: [], T: [], keep: [], N: 0 }, N: 0, dewN: 0, state: 'idle', tier: 0, prog: 0, s: 0, s0: 0, offT: 0, clean: false, bails: 0, t: 0, endT: 0, result: '', stopAt: 1e9, open: 0, mem: { ch: 0, best: 0, bestAt: null, worn: [], seen: 0 }, race: false, raceS: 0, raceT: 0, delta: null, newBest: false, auto: null, lastSpd: 0, goalShown: false, why: '' };
 
 // ground under the track: the water top over the pond and the brook, else the ground
 export function groundAt(x, z) {
@@ -212,7 +214,7 @@ function chordUpdate(on) { // a soft held chord, one note per tier
 // ---------- saving ----------
 // ch: how many challenges are won. worn: what the bee has on (ids of wear.js). seen: how many earned pieces the bee has seen at its wardrobe cell.
 // A save from before the wardrobe has only ch and best: its pieces are earned, nothing is worn yet and all of them are new
-function loadMem() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && typeof s.ch === 'number') RUN.mem = { ch: s.ch, best: s.best || 0, bestAt: Array.isArray(s.bestAt) ? s.bestAt.map(Number) : null, worn: Array.isArray(s.worn) ? s.worn.filter(w => typeof w === 'string') : [], seen: typeof s.seen === 'number' ? s.seen : 0 }; } catch (e) { } }
+function loadMem() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && typeof s.ch === 'number') RUN.mem = { ch: s.ch, best: s.best || 0, bestAt: Array.isArray(s.bestAt) ? s.bestAt.map(Number) : null, worn: Array.isArray(s.worn) ? s.worn.filter(w => typeof w === 'string') : [], seen: typeof s.seen === 'number' ? s.seen : 0, bestR: s.bestR || 0, bestAtR: Array.isArray(s.bestAtR) ? s.bestAtR.map(Number) : null }; } catch (e) { } }
 export function saveMem() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(RUN.mem)); } catch (e) { } }
 
 export function setupLongRun() {
@@ -232,14 +234,14 @@ function updateOpen() {
   if (ribbon) ribbon.geometry.setDrawRange(0, Math.max(0, (stop - RUN.dewN + 1) * 6 - 6)); }
 
 // ---------- autopilot for tests: rides the track at a speed, height and side offset ----------
-function startAuto(o = {}) { const i = o.i || 0; RUN.auto = { s: i, spd: o.spd || 20, alt: o.alt === undefined ? 1.4 : o.alt, lat: o.lat || 0 }; placeAuto(0); }
+function startAuto(o = {}) { const i = o.i || 0; RUN.auto = { s: i, spd: o.spd || 20, alt: o.alt === undefined ? 1.4 : o.alt, lat: o.lat || 0, dir: o.dir || 1 }; placeAuto(0); } // dir -1: the other way round
 function stopAuto() { RUN.auto = null; }
-function placeAuto(dt) { const a = RUN.auto, N = RUN.N; a.s += a.spd * dt / STEP; const k = Math.floor(a.s), f = a.s - k, p = RUN.S[((k % N) + N) % N], q = RUN.S[(((k + 1) % N) + N) % N], tg = RUN.T[((k % N) + N) % N];
-  const x = lerp(p.x, q.x, f) - tg.z * a.lat, z = lerp(p.z, q.z, f) + tg.x * a.lat; P.pos.set(x, groundAt(x, z) + a.alt, z); P.vel.set(tg.x * a.spd, 0, tg.z * a.spd); P.yaw = Math.atan2(-tg.x, -tg.z); P.pitch = 0; RUN.lastSpd = a.spd; }
+function placeAuto(dt) { const a = RUN.auto, N = RUN.N, d = a.dir || 1; a.s += d * a.spd * dt / STEP; const k = Math.floor(a.s), f = a.s - k, p = RUN.S[((k % N) + N) % N], q = RUN.S[(((k + 1) % N) + N) % N], tg = RUN.T[((k % N) + N) % N];
+  const x = lerp(p.x, q.x, f) - tg.z * a.lat, z = lerp(p.z, q.z, f) + tg.x * a.lat; P.pos.set(x, groundAt(x, z) + a.alt, z); P.vel.set(d * tg.x * a.spd, 0, d * tg.z * a.spd); P.yaw = Math.atan2(-d * tg.x, -d * tg.z); P.pitch = 0; RUN.lastSpd = a.spd; }
 
 // ---------- the run itself ----------
-function startRun(i) {
-  Object.assign(RUN, { state: 'run', tier: 0, prog: 0, s: i, s0: i, offT: 0, slowT: 0, clean: true, bails: 0, t: 0, goalShown: false, why: '', third: !!G.third, allThird: !!G.third, minPollen: P.pollen, nightStart: !!(window.NIGHT && window.NIGHT.active), hj: -1, hiN: 0, up: false, race: false, raceS: i, raceT: 0, delta: null, newBest: false, cell: -1, cur: null });
+function startRun(i, dir = 1) {
+  Object.assign(RUN, { dir, state: 'run', tier: 0, prog: 0, s: i, s0: i, offT: 0, slowT: 0, clean: true, bails: 0, t: 0, goalShown: false, why: '', third: !!G.third, allThird: !!G.third, minPollen: P.pollen, nightStart: !!(window.NIGHT && window.NIGHT.active), hj: -1, hiN: 0, up: false, race: false, raceS: i, raceT: 0, delta: null, newBest: false, cell: -1, cur: null });
   hud.style.opacity = 1; goalEl.style.opacity = 0;
 }
 function endRun(result, quiet = false) {
@@ -252,20 +254,22 @@ function endRun(result, quiet = false) {
     RUN.last = r; const ch = CHALLENGES[RUN.mem.ch];
     if (ch && ch.ok(r)) { RUN.mem.ch++; saveMem(); msg = `Challenge ${RUN.mem.ch} complete. Something new is waiting at home.`; /* wardrobe.js: a new piece hangs in the wardrobe cell */ tone(SCALE[2], 0.1, 2.4); tone(SCALE[4], 0.08, 2.4, 'sine', 0.15); tone(SCALE[7], 0.07, 2.6, 'sine', 0.3); }
     else { msg = 'All the way round'; tone(SCALE[4], 0.08, 2); tone(SCALE[7], 0.06, 2.2, 'sine', 0.15); }
-    if (RUN.race && RUN.cur) { const lap = RUN.raceT, m = RUN.mem; if (!m.best || lap < m.best) { const had = m.best > 0; m.best = lap; m.bestAt = fillSplits(RUN.cur, lap); RUN.newBest = had; saveMem(); if (had) msg += `\nA new best loop!  ${fmtTime(lap)}`; } /* the first loop sets the best quietly */ }
+    if (RUN.race && RUN.cur) { const lap = RUN.raceT, m = RUN.mem, b = bestOf(RUN.dir); if (!b.best || lap < b.best) { const had = b.best > 0; if (RUN.dir > 0) { m.best = lap; m.bestAt = fillSplits(RUN.cur, lap); } else { m.bestR = lap; m.bestAtR = fillSplits(RUN.cur, lap); } RUN.newBest = had; saveMem(); if (had) msg += `\nA new best loop!  ${fmtTime(lap)}`; } /* the first loop sets the best quietly */ }
   } else if (result === 'stopped') msg = 'The trail is overgrown past here';
   else if (result === 'lost') { msg = 'Off the trail'; sweep(500, 260, 0.5, 0.04); }
   if (msg) { goalEl.textContent = msg; goalEl.style.opacity = 1; }
 }
 // ---------- the race clock ----------
+// each way round the loop has its own best loop (best, bestAt the first way; bestR, bestAtR the other)
+export const bestOf = dir => dir < 0 ? { best: RUN.mem.bestR || 0, at: RUN.mem.bestAtR || null } : { best: RUN.mem.best || 0, at: RUN.mem.bestAt || null };
 export function fmtTime(t) { const d = Math.floor(t * 10 + 1e-6), m = Math.floor(d / 600), sec = Math.floor(d / 10) % 60; return `${m}:${String(sec).padStart(2, '0')}.${d % 10}`; }
 // the time at each SPLIT samples of the loop, counted from the race's start. Ahead or behind: this race's time so far against the time
 // the best loop took over the same stretch of track (the best loop may have started anywhere else on it)
-function splits(N) { const idx = ((Math.floor(RUN.s) % N) + N) % N, c = Math.floor(idx / SPLIT), n = Math.ceil(N / SPLIT);
-  if (c !== RUN.cell) { if (RUN.cell < 0) RUN.cur[c] = 0; else for (let k = (RUN.cell + 1) % n, g = 0; g < n; k = (k + 1) % n, g++) { if (RUN.cur[k] === undefined) RUN.cur[k] = RUN.raceT; if (k === c) break; } RUN.cell = c; }
-  const B = RUN.mem.bestAt, a = Math.floor(((Math.floor(RUN.raceS) % N) + N) % N / SPLIT);
-  if (!B || !RUN.mem.best || B.length !== n || RUN.s - RUN.raceS < 3 * SPLIT) { RUN.delta = null; return; }
-  let seg = B[c] - B[a]; if (seg < 0) seg += RUN.mem.best; RUN.delta = RUN.raceT - seg; }
+function splits(N) { const d = RUN.dir, idx = ((Math.floor(RUN.s) % N) + N) % N, c = Math.floor(idx / SPLIT), n = Math.ceil(N / SPLIT);
+  if (c !== RUN.cell) { if (RUN.cell < 0) RUN.cur[c] = 0; else for (let k = (RUN.cell + d + n) % n, g = 0; g < n; k = (k + d + n) % n, g++) { if (RUN.cur[k] === undefined) RUN.cur[k] = RUN.raceT; if (k === c) break; } RUN.cell = c; }
+  const { best, at: B } = bestOf(d), a = Math.floor(((Math.floor(RUN.raceS) % N) + N) % N / SPLIT);
+  if (!B || !best || B.length !== n || d * (RUN.s - RUN.raceS) < 3 * SPLIT) { RUN.delta = null; return; }
+  let seg = B[c] - B[a]; if (seg < 0) seg += best; RUN.delta = RUN.raceT - seg; }
 function fillSplits(cur, lap) { const n = Math.ceil(RUN.N / SPLIT), out = []; for (let k = 0; k < n; k++) out.push(+(cur[k] === undefined ? lap : cur[k]).toFixed(2)); return out; }
 function bail(why) { RUN.bails++; RUN.why = why; if (RUN.tier > 0) { RUN.tier--; sweep(700, 330, 0.35, 0.05); } RUN.prog = 0; }
 
@@ -275,7 +279,8 @@ export function runFrame(dt) {
   updateOpen();
   const flying = P.mode === 'fly', x = P.pos.x, z = P.pos.z, spd = P.vel.length();
   if (RUN.state === 'idle') {
-    if (flying) { const nb = nearest(x, z); if (nb.i >= 0 && nb.i < (RUN.full ? RUN.N : RUN.stopAt - 8) && nb.d < RUNK.half) { const alt = P.pos.y - groundAt(x, z), fwd = P.vel.x * RUN.T[nb.i].x + P.vel.z * RUN.T[nb.i].z; if (alt < RUNK.ceil && fwd > RUNK.minSpd) startRun(nb.i); } }
+    if (flying) { const nb = nearest(x, z); let ok = false; if (nb.i >= 0 && nb.i < (RUN.full ? RUN.N : RUN.stopAt - 8) && nb.d < RUNK.half) { const alt = P.pos.y - groundAt(x, z), fwd = P.vel.x * RUN.T[nb.i].x + P.vel.z * RUN.T[nb.i].z; ok = alt < RUNK.grassTop && Math.abs(fwd) > RUNK.joinSpd; if (ok) RUN.joinDir = fwd > 0 ? 1 : -1; } // either way round the loop
+      RUN.joinT = ok ? (RUN.joinT || 0) + dt : 0; if (RUN.joinT >= RUNK.join) { RUN.joinT = 0; startRun(nb.i, RUN.joinDir); } } else RUN.joinT = 0;
   } else if (RUN.state === 'run') {
     RUN.t += dt;
     if (!RUN.race && RUN.t >= RUNK.race) { RUN.race = true; RUN.raceS = RUN.s; RUN.raceT = 0; RUN.cur = RUN.full ? [] : null; } else if (RUN.race) RUN.raceT += dt;
@@ -284,24 +289,24 @@ export function runFrame(dt) {
       const N = RUN.N, prevI = ((Math.round(RUN.s) % N) + N) % N; let lat, alt, tg;
       // highbranch.js: is the bee on the high branch (up on the wood, not where it still lies on the ground)? Then the wood is its track and its ground
       const hb = highNear(x, z), up = !!hb && HIGH.lift[hb.j] > HIGHK.lift && hb.lat < RUNK.half && P.pos.y - hb.top > -HIGHK.under && P.pos.y - hb.top < RUNK.ceil;
-      if (up) { const at = HIGH.i0 + hb.j / (HIGH.N - 1) * (HIGH.i1 - HIGH.i0); let dh = ((at - RUN.s) % N + N) % N; if (dh > N / 2) dh -= N; RUN.s += dh; /* s counts on round the loop from where the run began */ lat = hb.lat; alt = P.pos.y - hb.top; tg = HIGH.T[hb.j]; if (hb.j > RUN.hj && hb.j - RUN.hj < 8) RUN.hiN += hb.j - RUN.hj; RUN.hj = Math.max(RUN.hj, hb.j); }
+      if (up) { const at = HIGH.i0 + hb.j / (HIGH.N - 1) * (HIGH.i1 - HIGH.i0); let dh = ((at - RUN.s) % N + N) % N; if (dh > N / 2) dh -= N; RUN.s += dh; /* s counts on round the loop from where the run began */ lat = hb.lat; alt = P.pos.y - hb.top; tg = HIGH.T[hb.j]; if (RUN.dir > 0) { if (hb.j > RUN.hj && hb.j - RUN.hj < 8) RUN.hiN += hb.j - RUN.hj; RUN.hj = Math.max(RUN.hj, hb.j); } } /* the high branch counts for challenge 3 the first way round only */
       else { const nb = nearest(x, z, prevI, 40); let di = nb.i - prevI; if (di > N / 2) di -= N; if (di < -N / 2) di += N; RUN.s += di; lat = lateral(x, z, nb.i); alt = P.pos.y - groundAt(x, z); tg = RUN.T[nb.i]; }
-      RUN.up = up; const fwd = P.vel.x * tg.x + P.vel.z * tg.z;
+      RUN.up = up; const fwd = RUN.dir * (P.vel.x * tg.x + P.vel.z * tg.z); // along the way this run goes
       const bumped = RUN.lastSpd > 6 && spd < RUN.lastSpd * (1 - RUNK.bump);
       const on = lat < RUNK.half, low = alt < RUNK.ceil, fast = fwd > RUNK.minSpd, clean = on && low && fast && !bumped;
       if (G.third) RUN.allThird = RUN.allThird && true; else RUN.allThird = false; if (G.third) RUN.third = true;
       RUN.minPollen = Math.min(RUN.minPollen, P.pollen);
       if (clean) { RUN.offT = 0; RUN.prog += dt; if (RUN.prog >= RUNK.tierT) { if (RUN.tier < 5) { RUN.tier++; tone(CHORD[RUN.tier - 1] * 2, 0.07, 1.6); } RUN.prog = RUN.tier < 5 ? 0 : RUNK.tierT; } }
       else { if (RUN.clean || bumped) bail(!on ? 'off' : !low ? 'high' : !fast ? 'slow' : 'bump'); if (!on || !fast) RUN.offT += dt; else RUN.offT = 0; }
-      RUN.slowT = on && !fast && !bumped ? (RUN.slowT || 0) + dt : 0; // stopped on the track: the run is over after RUNK.stall s (off the track the grass slows the bee, and that does not count)
+      RUN.slowT = on && fwd < RUNK.joinSpd && !bumped ? (RUN.slowT || 0) + dt : 0; // stopped on the track: the run is over after RUNK.stall s (off the track the grass slows the bee, and that does not count)
       // off the track and down in the grass: the grass holds the bee back, so a slip costs time (it no longer ends the run)
       if (!on && !up && alt < RUNK.grassTop && Math.abs(groundAt(x, z) - terrainH(x, z)) < 0.05) { const k = Math.max(0, 1 - RUNK.drag * dt); P.vel.x *= k; P.vel.z *= k; }
       RUN.clean = clean;
       if (RUN.race && RUN.full && RUN.cur) splits(N); // a race that began with part of the track open has no clock, even if a zone opens on the way
       if ((lat > RUNK.leave && nearest(x, z).d > RUNK.leave) || RUN.slowT > RUNK.stall) endRun('lost'); // flown away from the track: the run is over
-      else if (RUN.full && RUN.race && RUN.s - RUN.raceS >= N) endRun('done'); // all the way round, back to the line laid when the race started
-      else if (!RUN.full && RUN.s >= RUN.stopAt - 4) endRun('stopped');
-      else if (RUN.s < RUN.s0 - 20) endRun('lost');
+      else if (RUN.full && RUN.race && RUN.dir * (RUN.s - RUN.raceS) >= N) endRun('done'); // all the way round, back to the line laid when the race started
+      else if (!RUN.full && (RUN.dir > 0 ? RUN.s >= RUN.stopAt - 4 : RUN.s <= 4)) endRun('stopped'); // the open track ends there (the other way round: at the dew path's mouth)
+      else if (RUN.dir * (RUN.s - RUN.s0) < -20) endRun('lost');
       if (RUN.state === 'run' && RUN.full && !RUN.goalShown && RUN.t > RUNK.showGoal && CHALLENGES[RUN.mem.ch]) { RUN.goalShown = true; goalEl.textContent = `Challenge ${RUN.mem.ch + 1}: ${CHALLENGES[RUN.mem.ch].text}`; goalEl.style.opacity = 1; RUN.goalT = 0; }
       if (RUN.goalShown && RUN.state === 'run') { RUN.goalT += dt; if (RUN.goalT > 5) goalEl.style.opacity = 0; }
       chordUpdate(RUN.state === 'run');
