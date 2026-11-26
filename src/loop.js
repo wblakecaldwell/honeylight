@@ -60,7 +60,7 @@ export function update(dt) {
     P.pos.set(BIRTH.x, BIRTH.y + Math.sin(time * 1.1) * 0.006, BIRTH.z - 0.72 + Math.min(P.chews, 8) * 0.012);
     if (P.mode === 'cell') { if (P.t > 3 && P.chews === 0 && hintEl.style.opacity != 1) hint('<kbd>click</kbd>', 5);
       black = P.lives > 1 ? clamp(1 - P.t / 1.5, 0, 1) : 0;
-      if (P.chews >= 3 && !hero.active && P.lives === 1) { hero.active = true; hero.look = new V3(BIRTH.x, BIRTH.y, BIRTH.z - 0.5); if (hero.p.distanceTo(P.pos) > 6) hero.p.set(BIRTH.x + 2, BIRTH.y + 1.5, BIRTH.z + 1.4); }
+      if (P.chews >= 3 && !hero.active && P.lives === 1) { hero.active = true; hero.look = new V3(BIRTH.x, BIRTH.y, BIRTH.z - 0.5); }
       if (hero.active) hero.tp.set(BIRTH.x + Math.sin(time * 0.9) * 0.08, BIRTH.y + 0.02 + Math.sin(time * 1.4) * 0.05, BIRTH.z + 0.62); }
   } else if (P.mode === 'emerge') {
     const f = smooth(0, 1.8, P.t); P.pos.set(BIRTH.x, BIRTH.y, lerp(BIRTH.z - 0.62, BIRTH.z + 0.24, f)); P.pos.y += Math.sin(P.t * 9) * 0.012;

@@ -228,10 +228,39 @@ export function setupForagers() {
   for (let i = 0; i < 28; i++) makeForager();
 }
 
-// scripted sisters: the one who greets you at birth, and three who welcome you home
-function makeScripted() { const b = makeFlier(1.02); b.tp = new V3(rnd(-4, 4), rnd(2, 5), rnd(-4, 4)); b.look = null; b.active = false; b.p.copy(b.tp); const a = rnd(TAU), r = rnd(2, 6), yy = rnd(2, 5), f = rnd(0.2, 0.4);
-  b.update = (dt, t) => { if (!b.active) { b.tp.set(Math.cos(t * f + a) * r, yy + Math.sin(t * 0.5 + a), Math.sin(t * f * 1.2 + a) * r); _v.set(b.tp.x - BIRTH.x, b.tp.y - BIRTH.y, b.tp.z - BIRTH.z); const dB = _v.length(); if (dB < 3.5) b.tp.addScaledVector(_v.normalize(), 3.5 - dB); }
-    b.p.lerp(b.tp, Math.min(1, dt * (b.active ? 3.2 : 1.2))); b.p.y += Math.sin(t * 5 + b.ph) * 0.004;
+// scripted sisters: the one who greets you at birth, and three who welcome you home.
+// They fly like bees, not like ghosts (HIV-016): a speed and a turn rate with limits, a path that goes round the combs, and the wax pushes them out.
+// The combs stand on the floor of the hive from yb up to the roof, so between two combs is a lane open only at the bottom: to change lanes a sister
+// flies down her lane until she is under the combs, across, and up the other lane. Below GREET.low there is no wax anywhere.
+export const GREET = { r: 0.32, vmax: 4.5, amax: 14, low: 0 };
+function laneOf(z) { let n = 0; for (const c of COMBS) if (c.z < z) n++; return n; }
+function laneMid(n) { const a = n > 0 ? COMBS[n - 1].z + CT / 2 : -RIN, b = n < COMBS.length ? COMBS[n].z - CT / 2 : RIN; return (Math.max(a, -RIN + 1) + Math.min(b, RIN - 1)) / 2; }
+function laneHalf(n) { const a = n > 0 ? COMBS[n - 1].z + CT / 2 : -RIN, b = n < COMBS.length ? COMBS[n].z - CT / 2 : RIN; return (Math.min(b, RIN - 1) - Math.max(a, -RIN + 1)) / 2; }
+const _wp = new V3(), _dv = new V3();
+function greetRoute(p, goal) { // the next point to fly at on the way to goal
+  const L = GREET.low, below = L - 0.8, pl = laneOf(p.z), gl = laneOf(goal.z);
+  if (p.y < L && goal.y < L) return goal;
+  if (p.y >= L - 0.3) return pl === gl ? goal : _wp.set(clamp(p.x, -5, 5), below, laneMid(pl)); // down this lane, under the combs
+  if (pl === gl && Math.abs(p.z - laneMid(gl)) < laneHalf(gl) - GREET.r - 0.15) return goal; // up the lane, clear of the comb edges
+  return _wp.set(clamp(goal.x, -5, 5), below, laneMid(gl)); // across, to the foot of the goal's lane
+}
+export function greetSolid(p, v, r = GREET.r) { // push a flying sister out of the wax, the wall, the floor and the roof
+  const rad = Math.hypot(p.x, p.z); if (rad > RIN - r) { const k = (RIN - r) / rad; p.x *= k; p.z *= k; }
+  if (p.y < r) { p.y = r; v.y = Math.max(v.y, 0); } if (p.y > HTOP - r) { p.y = HTOP - r; v.y = Math.min(v.y, 0); }
+  for (const c of COMBS) {
+    const dz = p.z - c.z, hz = CT / 2 + r; if (Math.abs(dz) >= hz || Math.abs(p.x) > c.hw + r || p.y < c.yb - r) continue;
+    if (c.holes.some(h => Math.hypot(p.x - h.x, p.y - h.y) < h.r - r)) continue;
+    const pz = hz - Math.abs(dz), py = p.y - (c.yb - r), px = c.hw + r - Math.abs(p.x);
+    if (pz <= py && pz <= px) { p.z = c.z + Math.sign(dz || 1) * hz; v.z = 0; } else if (py <= px) { p.y = c.yb - r; v.y = Math.min(v.y, 0); } else { p.x = Math.sign(p.x) * (c.hw + r); v.x = 0; }
+  }
+}
+function makeScripted() { const b = makeFlier(1.02); b.tp = new V3(rnd(-4, 4), rnd(2, 5), rnd(-4, 4)); b.look = null; b.active = false; b.p.copy(b.tp); b.v = new V3(); const a = rnd(TAU), r = rnd(2, 6), yy = rnd(2, 5), f = rnd(0.2, 0.4);
+  b.update = (dt, t) => { if (!GREET.low) GREET.low = Math.min(...COMBS.map(c => c.yb)) - GREET.r - 0.4;
+    if (!b.active) { b.tp.set(Math.cos(t * f + a) * r, yy + Math.sin(t * 0.5 + a), Math.sin(t * f * 1.2 + a) * r); _v.set(b.tp.x - BIRTH.x, b.tp.y - BIRTH.y, b.tp.z - BIRTH.z); const dB = _v.length(); if (dB < 3.5) b.tp.addScaledVector(_v.normalize(), 3.5 - dB); }
+    if (dt > 0) { // fly at the next point of the route: the wanted speed falls off near it, the wings change the speed only so fast
+      const w = greetRoute(b.p, b.tp); _dv.copy(w).sub(b.p).multiplyScalar(b.active ? 3 : 1.4); if (_dv.length() > GREET.vmax) _dv.setLength(GREET.vmax);
+      _dv.sub(b.v).multiplyScalar(b.active ? 9 : 5); if (_dv.length() > GREET.amax) _dv.setLength(GREET.amax);
+      b.v.addScaledVector(_dv, dt); b.p.addScaledVector(b.v, dt); b.p.y += Math.sin(t * 5 + b.ph) * 0.004; greetSolid(b.p, b.v); }
     if (b.active && b.look) { _v.copy(b.look).sub(b.p); b.fwd.lerp(_v.normalize(), Math.min(1, dt * 6)); orient(b.q, b.fwd, YA); b.q.multiply(_q.setFromAxisAngle(ZA, Math.sin(t * 9 + b.ph) * 0.07)); b.prev.copy(b.p); } else b.face(dt); }; return b; }
 
 export let hero, greeters;
