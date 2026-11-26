@@ -18,4 +18,9 @@ module.exports = [
     setup: () => { T.fly(60, 12, 40); T.quiet(); __g.DAY.t = 0.2; __g.G.third = true; T.key('KeyW'); T.sim(2); } },
   { id: 'comb-walk-outside', name: 'On the comb, seen from outside, in the middle of a waddle step',
     setup: () => { const g = __g, P = g.P; g.G.third = true; document.getElementById('title').click(); let n = 0; while (P.mode === 'cell' && n < 40) { g.chew(); T.sim(0.2); n++; } T.sim(6); T.key('KeyW'); T.sim(1.02); } },
+  { id: 'queen-crown', name: 'The queen on her comb in her crown: gold points, lavender velvet, violet drops, the blue jewel in front',
+    setup: () => { const g = __g, Q = window.__crown.queen, V = g.THREE.Vector3; T.fly(); T.quiet(); g.DAY.t = 0.2; T.sim(0.5);
+      // a free camera above her head (the bee's own camera cannot look down at a comb face): set after the last step, the picture is drawn without one
+      const h = window.__crown.HEAD.clone().applyMatrix4(new g.THREE.Matrix4().compose(Q.p, Q.q, Q.s)), f = new V(0, 0, 1).applyQuaternion(Q.q), u = new V(0, 1, 0).applyQuaternion(Q.q);
+      const c = g.camera; const step = Math.PI / 4, a = (Math.round(Math.atan2(f.y, f.x) / step - 0.5) + 0.5) * step; c.position.copy(h).add(new V(Math.cos(a) * 1.9, Math.sin(a) * 1.9, 0)).addScaledVector(u, 1.7); /* in front of her, between two of her eight attendants */ c.up.copy(u); c.lookAt(h); c.fov = 40; c.updateProjectionMatrix(); c.updateMatrixWorld(true); g.U.uCam.value.copy(c.position); } },
 ];

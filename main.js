@@ -33,6 +33,7 @@ import * as racemap from './src/racemap.js';
 import * as wear from './src/wear.js';
 import * as wardrobe from './src/wardrobe.js';
 import * as lookcam from './src/lookcam.js';
+import * as crown from './src/crown.js';
 
 engine.setupColorSpace();
 world.setupLandmarks();
@@ -46,6 +47,7 @@ hive.setupComb();
 hive.setupBirthCell();
 bees.setupBeeBodies();
 bees.setupHiveBees();
+crown.setupCrown();
 bees.setupForagers();
 bees.setupScriptedSisters();
 bees.setupDanceTrail();

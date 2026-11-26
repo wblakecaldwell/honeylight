@@ -11,6 +11,7 @@ Each file starts with a `// Honeylight: ...` line that says what is in it. This 
 | `day.js` | The sky, the day from afternoon to dusk, and the day card. |
 | `hive.js` | The hive: the tree shell, the combs, the birth cell and the door. |
 | `bees.js` | The sisters: bodies, hive bees, foragers, the dance, escorts and the bee ball. |
+| `crown.js` | The queen's crown: gold, a lavender velvet cushion, violet drops and a blue jewel, worn a little crooked. `?crown=0` leaves it off. |
 | `plants.js` | Trees and leaves, the dew path, grass (and how it turns see-through near a bee down in it), flowers, mushrooms, and how solid they are. |
 | `places.js` | The ground, pond, orchard, hedge, log, forest edge, brook, branches and the bramble hollow. |
 | `air.js` | Air to ride: warm stones, dew arches, wind, updrafts and petal gusts. |

@@ -179,7 +179,7 @@ function makeWalker(ci, side, o = {}) {
   return b;
 }
 
-let queen, dancer;
+export let queen; let dancer;
 export function setupHiveBees() {
   COMBS.forEach((c, ci) => { for (const side of [1, -1]) for (let i = 0; i < 13; i++) makeWalker(ci, side); });
   // queen and her retinue
